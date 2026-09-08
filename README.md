@@ -1,20 +1,19 @@
-# Ultimate Rewards — Functional Supabase Version
+# Ultimate Rewards v3
+Discord OAuth member/staff login + glass blur UI.
 
-This version connects the frontend to Supabase using the browser-safe publishable key.
+Discord server ID: `1542542660458385508`
+Staff Team role ID: `1543935007339585630`
 
-## Supabase
-Project URL:
-https://pgibyelbtymagxrwhkle.supabase.co
+Deploy as a Render Web Service:
+- Build: `npm install`
+- Start: `npm start`
 
-The database tables should already be created from the SQL setup:
-- tickets
-- ticket_messages
-- orders
+Render environment variables:
+- `DISCORD_CLIENT_ID`
+- `DISCORD_CLIENT_SECRET`
+- `DISCORD_REDIRECT_URI` = `https://YOUR-RENDER-DOMAIN.onrender.com/auth/discord/callback`
+- `SESSION_SECRET` = long random value
 
-## Important
-Never put a Supabase Secret/service-role key in this project or GitHub.
+Discord OAuth scopes: `identify`, `guilds.members.read`.
 
-## Deploy update
-1. Replace the files in your GitHub repository with these updated files.
-2. Commit the changes.
-3. Render will automatically redeploy the connected repository.
+Never commit Discord client secrets, session secrets, or Supabase service-role/secret keys to GitHub.

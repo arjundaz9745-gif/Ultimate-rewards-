@@ -153,13 +153,52 @@ window.UR = {
 };
 </script>
 
+
+<style>
+body{
+  background:
+    radial-gradient(700px 500px at 10% 5%,rgba(120,70,255,.20),transparent 65%),
+    radial-gradient(650px 500px at 90% 25%,rgba(235,174,48,.15),transparent 65%),
+    #050505;
+}
+body:before,body:after{
+  content:"";position:fixed;z-index:-1;border-radius:50%;filter:blur(90px);opacity:.45;pointer-events:none;
+}
+body:before{width:330px;height:330px;left:-90px;top:30%;background:rgba(130,70,255,.28)}
+body:after{width:380px;height:380px;right:-120px;bottom:10%;background:rgba(240,170,40,.20)}
+nav,.card,.offer,.modalbox,.ticket,.panel,.feature,.product-card{
+  backdrop-filter:blur(24px) saturate(135%);
+  -webkit-backdrop-filter:blur(24px) saturate(135%);
+}
+nav{
+  background:rgba(5,5,7,.48)!important;
+  border-bottom:1px solid rgba(255,255,255,.12)!important;
+  box-shadow:0 12px 50px rgba(0,0,0,.22);
+}
+.modalbox,.discord-login-card{
+  background:linear-gradient(145deg,rgba(255,255,255,.095),rgba(255,255,255,.035))!important;
+  border:1px solid rgba(255,255,255,.15)!important;
+  box-shadow:0 30px 100px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.08);
+}
+.discord-login-card{padding:25px;border-radius:20px;text-align:center}
+.discord-icon{
+  width:54px;height:54px;margin:0 auto 14px;display:grid;place-items:center;
+  border-radius:17px;background:rgba(120,90,255,.16);
+  border:1px solid rgba(160,130,255,.28);font-size:25px;
+}
+.login-note{font-size:12px;opacity:.65;margin-top:13px;line-height:1.5}
+.stock-pill{
+  border:1px solid rgba(232,184,77,.35)!important;
+  background:rgba(232,184,77,.07);
+}
+</style>
 </head>
 <body>
 <nav>
   <div class="container navin">
     <a class="brand" href="#home"><img src="logo.png" alt="Ultimate Rewards logo"><span>Ultimate Rewards</span></a>
     <div class="navlinks"><a href="#shop">Shop</a><a href="#free">Free Rewards</a><a href="#payment">Payment</a><a href="#support">Support</a></div>
-    <button class="staffbtn" onclick="openModal('staff')">Staff Login</button>
+    <button class="staffbtn" onclick="openModal('staff')">Login with Discord</button>
   </div>
 </nav>
 
@@ -177,7 +216,7 @@ window.UR = {
     <article class="card featured">
       <div class="icon">🔥</div><h3>MCFA</h3><p>Password changeable • Email changeable</p>
       <div class="price">₹550 <small>only</small></div>
-      <ul class="features"><li>Password changeable</li><li>Email changeable</li><li>Limited stock</li></ul>
+      <ul class="features"><li>Password changeable</li><li>Email changeable</li><li>Stock: ∞</li></ul>
       <button class="goldbtn" onclick="openOrder('MCFA','₹550')">Create Ticket to Order</button>
     </article>
     <article class="card">
@@ -250,38 +289,29 @@ function openModal(type){
   <button class="goldbtn">Submit Ticket</button></form>`;
  }
 }
-function staffTab(mode,el){
- document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); if(el)el.classList.add('active');
- const box=document.getElementById('staffForm');
- if(mode==='login') box.innerHTML=`<form class="form" onsubmit="staffLogin(event)"><label>Staff Username</label><input required id="loginUser"><label>Password</label><input required type="password" id="loginPass"><button class="goldbtn">Login</button></form>`;
- else box.innerHTML=`<form class="form" onsubmit="staffRegister(event)"><label>Staff Username</label><input required id="regUser"><label>Password</label><input required type="password" id="regPass"><button class="goldbtn">Register Staff Account</button></form>`;
+
+function staffTab(mode, btn){
+  const box=document.getElementById('staffForm');
+  if(box) box.innerHTML = `
+    <div class="discord-login-card">
+      <div class="discord-icon">◈</div>
+      <h3>Login with Discord</h3>
+      <p>Members and staff use the same secure Discord login. Your server role decides which dashboard you can access.</p>
+      <button class="goldbtn" onclick="window.location.href='/auth/discord'">Continue with Discord</button>
+      <div class="login-note">Staff access requires the <b>Staff Team</b> role in the official Discord server.</div>
+    </div>`;
 }
-function staffRegister(e){e.preventDefault();localStorage.setItem('ur_staff',JSON.stringify({u:regUser.value,p:regPass.value}));toast('Staff account registered');staffTab('login');}
-function staffLogin(e){
- e.preventDefault();let s=JSON.parse(localStorage.getItem('ur_staff')||'null');
- if(!s){toast('Register a staff account first');return}
- if(loginUser.value===s.u&&loginPass.value===s.p){showDashboard()}else toast('Invalid staff login');
+async function loadStaffSession(){
+  try{
+    const r=await fetch('/api/me');
+    const data=await r.json();
+    if(data.loggedIn){
+      const btn=document.querySelector('.staffbtn');
+      if(btn) btn.textContent = data.isStaff ? 'Staff Dashboard' : 'Member Dashboard';
+    }
+  }catch(e){}
 }
-function showDashboard(){
- document.getElementById('modalTitle').textContent='Staff Dashboard';
- let t=getTickets();
- document.getElementById('modalContent').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="color:#aaa">${t.length} ticket(s)</span><button class="ghost" onclick="renderTickets()">Refresh</button></div><div id="ticketList"></div>`;
- renderTickets();
-}
-function renderTickets(){
- let box=document.getElementById('ticketList'),t=getTickets();
- if(!t.length){box.innerHTML='<div class="empty">No tickets yet.</div>';return}
- box.innerHTML=t.map((x,i)=>`<div class="ticket"><span class="status">${x.status}</span><b>${x.product||'Support'}</b><div>${x.user}</div><small>${x.issue||''} • ${x.time}</small><p style="margin-top:10px;color:#bbb">${escapeHtml(x.details)}</p>${x.status==='Open'?`<button class="ghost" style="margin-top:10px" onclick="closeTicket(${i})">Mark Resolved</button>`:''}</div>`).join('');
-}
-function closeTicket(i){let t=getTickets();t[i].status='Resolved';saveTickets(t);renderTickets();toast('Ticket marked resolved')}
-function openOrder(product,price){
- document.getElementById('modal').classList.add('show');document.getElementById('modalTitle').textContent=`Order — ${product}`;
- document.getElementById('modalContent').innerHTML=`<form class="form" onsubmit="submitTicket(event,'${product}')"><div class="notice">Selected: <b>${product}</b> — <b>${price}</b>. Complete payment using the QR on the Payment section, then submit the order request.</div><label>Discord Username</label><input required name="user" placeholder="e.g. DashWho"><label>Payment reference / note</label><input name="issue" placeholder="Optional payment reference"><label>Order details</label><textarea required name="details" placeholder="Add any details staff should know..."></textarea><button class="goldbtn">Submit Order Ticket</button></form>`;
-}
-function submitTicket(e,product){e.preventDefault();let f=e.target, data=new FormData(f),t=getTickets();t.unshift({id:Date.now(),product,user:data.get('user'),issue:data.get('issue')||'Order request',details:data.get('details'),status:'Open',time:new Date().toLocaleString()});saveTickets(t);closeModal();toast('Ticket created successfully')}
-function closeModal(){document.getElementById('modal').classList.remove('show')}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
-document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
+loadStaffSession();
 </script>
 
 <style>
@@ -304,5 +334,15 @@ document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='
 })();
 </script>
 
+<section class="ur-more"><h2>More About Our Offers</h2><p>Choose an offer and create a ticket. Our staff will guide you through the order and payment process.</p><div class="ur-cards"><div><h3>🎮 MCFA</h3><p><b>₹550</b><br>Password Changeable<br>Email Changeable<br>Order through a ticket.</p><b>Stock: ∞</b></div><div><h3>🎯 NFA</h3><p><b>₹100</b><br>Open a ticket to order.</p><b>Stock: ∞</b></div><div><h3>🟨 Robux</h3><p><b>₹100</b><br>Available through our support/order system.</p><b>Stock: ∞</b></div></div></section><section class="ur-more"><h2>Frequently Asked Questions</h2><details open><summary>How do I order?</summary><p>Select an offer and create an order ticket.</p></details><details><summary>Do customers need to register?</summary><p>No. Customers can order or contact support without a website account.</p></details><details><summary>How is staff registration restricted?</summary><p>Staff use Discord OAuth. The server verifies the Discord account is in the official server and has the required staff role before granting staff access.</p></details><details><summary>Can normal members register as staff?</summary><p>No. Members without the required staff role are denied staff access.</p></details><details><summary>What if payment fails?</summary><p>Create a support ticket with your Discord username, product and issue. Never send passwords, OTPs or secret keys.</p></details></section><style>.ur-more{max-width:1100px;margin:32px auto;padding:28px;border:1px solid rgba(255,255,255,.1);border-radius:24px;background:rgba(255,255,255,.035);backdrop-filter:blur(14px)}.ur-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}.ur-cards>div{padding:20px;border-radius:18px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.08)}.ur-more p{line-height:1.6;opacity:.78}.ur-more details{padding:15px 0;border-bottom:1px solid rgba(255,255,255,.08)}summary{cursor:pointer;font-weight:700}</style>
+<section class="ur-extra" id="account">
+  <h2>Your Ultimate Rewards Account</h2>
+  <p>One Discord login for members and staff. Customers do not need a separate website password.</p>
+  <div class="ur-grid">
+    <div class="ur-card"><h3>👤 Member</h3><p>Sign in with Discord to connect your member experience to your Discord identity.</p></div>
+    <div class="ur-card"><h3>🛡️ Staff</h3><p>Staff access is automatic only when your Discord account has the <b>Staff Team</b> role.</p></div>
+    <div class="ur-card"><h3>🔒 Role protected</h3><p>No public form can promote a member. The role check is performed server-side after Discord authentication.</p></div>
+  </div>
+</section>
 </body>
 </html>
