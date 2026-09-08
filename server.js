@@ -5,7 +5,6 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Discord settings
 const GUILD_ID = "1542542660458385508";
 const STAFF_ROLE_ID = "1543935007339585630";
 
@@ -28,10 +27,10 @@ app.use(
   })
 );
 
-// Serve website
-app.use(express.static(path.join(__dirname, "public")));
+// Serve files from the repository root
+app.use(express.static(__dirname));
 
-// Discord login
+// Discord Login
 app.get("/auth/discord", (req, res) => {
   if (!DISCORD_CLIENT_ID || !DISCORD_REDIRECT_URI) {
     return res.status(500).send("Discord OAuth is not configured.");
@@ -47,7 +46,7 @@ app.get("/auth/discord", (req, res) => {
   res.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`);
 });
 
-// Discord callback
+// Discord Callback
 app.get("/auth/discord/callback", async (req, res) => {
   const { code } = req.query;
 
@@ -76,11 +75,10 @@ app.get("/auth/discord/callback", async (req, res) => {
     const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok) {
-      console.error("Discord token error:", tokenData);
+      console.error(tokenData);
       return res.status(400).send("Discord login failed.");
     }
 
-    // Get Discord user
     const userResponse = await fetch(
       "https://discord.com/api/users/@me",
       {
@@ -96,7 +94,6 @@ app.get("/auth/discord/callback", async (req, res) => {
       return res.status(400).send("Couldn't get Discord account.");
     }
 
-    // Check server membership + staff role
     const memberResponse = await fetch(
       `https://discord.com/api/users/@me/guilds/${GUILD_ID}/member`,
       {
@@ -128,12 +125,12 @@ app.get("/auth/discord/callback", async (req, res) => {
 
     res.redirect("/?login=success");
   } catch (error) {
-    console.error("Discord OAuth error:", error);
+    console.error(error);
     res.status(500).send("Login error.");
   }
 });
 
-// Current logged-in user
+// Get logged-in user
 app.get("/api/me", (req, res) => {
   res.json({
     loggedIn: !!req.session.user,
@@ -141,7 +138,7 @@ app.get("/api/me", (req, res) => {
   });
 });
 
-// Staff-only test endpoint
+// Staff-only endpoint
 app.get("/api/staff-only", (req, res) => {
   if (!req.session.user || !req.session.user.isStaff) {
     return res.status(403).json({
@@ -162,14 +159,11 @@ app.get("/auth/logout", (req, res) => {
   });
 });
 
-// IMPORTANT:
-// Express 5 does not support app.get("*").
-// This middleware handles all remaining routes.
+// Fallback
 app.use((req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`Ultimate Rewards running on port ${PORT}`);
 });
