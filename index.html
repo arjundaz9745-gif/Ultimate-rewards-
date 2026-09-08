@@ -64,6 +64,95 @@ footer{border-top:1px solid rgba(255,255,255,.08);padding:35px 0;color:#817b72;f
 .toast{position:fixed;right:18px;bottom:18px;z-index:200;background:#15120c;border:1px solid var(--border);padding:13px 16px;border-radius:13px;display:none;box-shadow:0 15px 50px #000}.toast.show{display:block}
 @media(max-width:800px){.navlinks{display:none}.grid,.freebox,.payment{grid-template-columns:1fr}.hero{padding-top:65px}.section{padding:55px 0}h2{font-size:28px}.navin{height:68px}}
 </style>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* Ultimate Rewards — Supabase connection */
+const SUPABASE_URL = "https://pgibyelbtymagxrwhkle.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_Q9hD1R1ve-Mhw-t_6kApsw_ZaWVvUL8";
+const urSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+async function urCreateTicket(ticket) {
+  const { data, error } = await urSupabase.from("tickets").insert([{
+    discord_username: ticket.discord_username || ticket.discord || "Unknown",
+    ticket_type: ticket.ticket_type || ticket.type || "support",
+    product: ticket.product || null,
+    issue: ticket.issue || null,
+    details: ticket.details || ticket.message || "No details provided",
+    status: "open"
+  }]).select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function urGetTickets() {
+  const { data, error } = await urSupabase.from("tickets")
+    .select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+async function urGetMessages(ticketId) {
+  const { data, error } = await urSupabase.from("ticket_messages")
+    .select("*").eq("ticket_id", ticketId).order("created_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+async function urSendMessage(ticketId, senderName, message) {
+  const { data, error } = await urSupabase.from("ticket_messages").insert([{
+    ticket_id: ticketId,
+    sender_name: senderName,
+    sender_type: "staff",
+    message
+  }]).select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function urUpdateTicketStatus(ticketId, status) {
+  const { data, error } = await urSupabase.from("tickets")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", ticketId).select().single();
+  if (error) throw error;
+  return data;
+}
+
+async function urStaffLogin(email, password) {
+  const { data, error } = await urSupabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+async function urStaffRegister(email, password) {
+  const { data, error } = await urSupabase.auth.signUp({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+async function urStaffLogout() {
+  await urSupabase.auth.signOut();
+}
+
+async function urCurrentStaff() {
+  const { data } = await urSupabase.auth.getUser();
+  return data.user || null;
+}
+
+window.UR = {
+  supabase: urSupabase,
+  createTicket: urCreateTicket,
+  getTickets: urGetTickets,
+  getMessages: urGetMessages,
+  sendMessage: urSendMessage,
+  updateTicketStatus: urUpdateTicketStatus,
+  login: urStaffLogin,
+  register: urStaffRegister,
+  logout: urStaffLogout,
+  currentStaff: urCurrentStaff
+};
+</script>
+
 </head>
 <body>
 <nav>
@@ -194,5 +283,26 @@ function closeModal(){document.getElementById('modal').classList.remove('show')}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
 </script>
+
+<style>
+#ur-db-status{position:fixed;right:14px;bottom:14px;z-index:9999;padding:8px 12px;border:1px solid rgba(255,255,255,.12);border-radius:999px;background:rgba(10,10,10,.78);backdrop-filter:blur(12px);font:600 12px system-ui;color:#ddd}
+#ur-db-status.ok{border-color:rgba(212,175,55,.35)}
+</style>
+<div id="ur-db-status">Connecting…</div>
+<script>
+(async()=>{
+  const el=document.getElementById("ur-db-status");
+  try {
+    const {error}=await UR.supabase.from("tickets").select("id",{count:"exact",head:true});
+    if(error) throw error;
+    el.textContent="● Database connected";
+    el.classList.add("ok");
+  } catch(e) {
+    el.textContent="● Database setup needed";
+    console.warn("Supabase:",e);
+  }
+})();
+</script>
+
 </body>
 </html>

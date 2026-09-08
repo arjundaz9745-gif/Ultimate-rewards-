@@ -1,20 +1,20 @@
-# Ultimate Rewards Website
+# Ultimate Rewards — Functional Supabase Version
 
-Static frontend demo for the Ultimate Rewards Discord shop.
+This version connects the frontend to Supabase using the browser-safe publishable key.
 
-Files:
-- index.html — complete responsive website
-- logo.png — supplied Ultimate Rewards logo
-- fampay-qr.png — supplied QR image
+## Supabase
+Project URL:
+https://pgibyelbtymagxrwhkle.supabase.co
 
-Features:
-- Black/gold glassmorphism UI
-- MCFA ₹550, NFA ₹100, Robux ₹100 offers
-- Free Rewards section
-- Fampay QR payment section
-- Customer order/support ticket UI without customer login
-- Staff register/login and local ticket dashboard
-- Discord invite button
+The database tables should already be created from the SQL setup:
+- tickets
+- ticket_messages
+- orders
 
-Important:
-This version is a frontend/local-storage demo. Staff accounts and tickets are stored only in the browser and are NOT secure for a real production store. A production deployment should use a proper backend, database, authentication, access control, and payment verification.
+## Important
+Never put a Supabase Secret/service-role key in this project or GitHub.
+
+## Deploy update
+1. Replace the files in your GitHub repository with these updated files.
+2. Commit the changes.
+3. Render will automatically redeploy the connected repository.
