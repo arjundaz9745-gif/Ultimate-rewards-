@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Dashboard | Ultimate Rewards</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="bg-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+  </div>
+
+  <nav class="navbar glass">
+    <div class="nav-brand">
+      <img src="/logo.png" alt="UR" class="logo-img">
+      <span class="brand-text">Ultimate Rewards</span>
+    </div>
+    <div class="nav-links">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/auth/logout" class="btn secondary sm">Logout</a>
+    </div>
+  </nav>
+
+  <div class="page-wrap">
+    <div class="page-header">
+      <h1>My Dashboard</h1>
+      <div class="user-pill" id="userPill">Loading...</div>
+    </div>
+
+    <!-- Create Ticket -->
+    <div class="glass-card" style="padding:1.75rem; margin-bottom:2rem;">
+      <h2 style="font-family:var(--display); color:var(--gold-light); margin-bottom:1rem;">Create New Ticket</h2>
+      <form id="ticketForm">
+        <div class="form-group">
+          <label>Product</label>
+          <select id="productSelect" required></select>
+        </div>
+        <div class="form-group">
+          <label>Payment Proof (UPI transaction ID / screenshot link)</label>
+          <input type="text" id="paymentProof" placeholder="e.g. TXN123456 or image link" required>
+        </div>
+        <div class="form-group">
+          <label>Note (optional)</label>
+          <textarea id="customerNote" placeholder="Any extra info for staff..."></textarea>
+        </div>
+        <button type="submit" class="btn primary">Submit Ticket</button>
+      </form>
+      <p id="ticketMsg" style="margin-top:1rem; color:var(--success);" class="hidden"></p>
+    </div>
+
+    <!-- My Tickets -->
+    <h2 style="font-family:var(--display); color:var(--gold-light); margin-bottom:1rem;">My Tickets</h2>
+    <div id="ticketsList">Loading...</div>
+  </div>
+
+  <script>
+    let products = [];
+
+    async function init() {
+      const me = await fetch('/api/me').then(r => r.json());
+      if (!me.loggedIn) {
+        window.location.href = '/auth/login';
+        return;
+      }
+      if (me.user.is_staff) {
+        // optional: still allow staff to use member dashboard
+      }
+
+      const avatar = me.user.avatar
+        ? `https://cdn.discordapp.com/avatars/${me.user.id}/${me.user.avatar}.png?size=64`
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+      document.getElementById('userPill').innerHTML = `
+        <img src="${avatar}" class="user-avatar" alt="">
+        <span>${me.user.global_name || me.user.username}</span>
+      `;
+
+      products = await fetch('/api/products').then(r => r.json());
+      const sel = document.getElementById('productSelect');
+      sel.innerHTML = products.map(p =>
+        `<option value="${p.id}">${p.name} — ${p.price}</option>`
+      ).join('');
+
+      loadTickets();
+    }
+
+    async function loadTickets() {
+      const tickets = await fetch('/api/tickets/mine').then(r => r.json());
+      const list = document.getElementById('ticketsList');
+      if (!tickets.length) {
+        list.innerHTML = '<p style="color:var(--text-muted)">No tickets yet. Create one above after paying.</p>';
+        return;
+      }
+      list.innerHTML = tickets.map(t => `
+        <div class="ticket-card glass-card">
+          <div>
+            <div class="ticket-id">#${t.id}</div>
+            <strong>${t.product_name}</strong> · ${t.price}
+            <div style="font-size:0.85rem; color:var(--text-muted); margin-top:0.3rem;">
+              ${t.customer_note || ''}
+              ${t.payment_proof ? `<br>Proof: ${t.payment_proof}` : ''}
+              ${t.staff_note ? `<br><em>Staff: ${t.staff_note}</em>` : ''}
+            </div>
+            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.4rem;">
+              ${new Date(t.created_at + 'Z').toLocaleString()}
+            </div>
+          </div>
+          <span class="status ${t.status}">${t.status.replace('_', ' ')}</span>
+        </div>
+      `).join('');
+    }
+
+    document.getElementById('ticketForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        product_id: document.getElementById('productSelect').value,
+        payment_proof: document.getElementById('paymentProof').value,
+        customer_note: document.getElementById('customerNote').value
+      };
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('ticketMsg').textContent = `Ticket #${data.ticket_id} created! Staff will review soon.`;
+        document.getElementById('ticketMsg').classList.remove('hidden');
+        e.target.reset();
+        loadTickets();
+      } else {
+        alert(data.error || 'Failed');
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>
