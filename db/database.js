@@ -1,68 +1,144 @@
-const Database = require('better-sqlite3');
+const fs = require('fs');
 const path = require('path');
 
-const db = new Database(path.join(__dirname, 'store.db'));
+const DB_PATH = path.join(__dirname, 'store.json');
 
-// Enable WAL for better concurrent performance
-db.pragma('journal_mode = WAL');
+const defaultData = {
+  users: {},
+  tickets: [],
+  products: [
+    {
+      id: 'mcfa',
+      name: 'MCFA',
+      description: 'Minecraft Full Access account. Instant delivery after payment confirmation.',
+      price: '₹300',
+      icon: '⛏️',
+      stock: 'Infinite',
+      active: 1
+    },
+    {
+      id: 'robux',
+      name: 'Robux',
+      description: 'Roblox Robux top-up. Secure transfer via our trusted staff.',
+      price: '$100',
+      icon: '💎',
+      stock: 'Infinite',
+      active: 1
+    },
+    {
+      id: 'nfa',
+      name: 'NFA',
+      description: 'Non-Full Access account. Requires 2 invites from our Discord server.',
+      price: '2 Invites',
+      icon: '🔑',
+      stock: 'Infinite',
+      active: 1
+    },
+    {
+      id: 'crunchyroll',
+      name: 'Crunchyroll Premium',
+      description: 'Official value \~₹79–99/mo or ₹475/year in India. Competitive access.',
+      price: 'Contact Staff',
+      icon: '🍥',
+      stock: 'Infinite',
+      active: 1
+    },
+    {
+      id: 'ytpremium',
+      name: 'YouTube Premium',
+      description: 'Monthly plan. Our rate: ₹100 / month.',
+      price: '₹100 / mo',
+      icon: '▶️',
+      stock: 'Infinite',
+      active: 1
+    }
+  ]
+};
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    username TEXT NOT NULL,
-    global_name TEXT,
-    avatar TEXT,
-    is_staff INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    last_login TEXT DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS tickets (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    product_id TEXT NOT NULL,
-    product_name TEXT NOT NULL,
-    price TEXT,
-    status TEXT DEFAULT 'open',
-    payment_proof TEXT,
-    customer_note TEXT,
-    staff_note TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS products (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    price TEXT NOT NULL,
-    icon TEXT,
-    stock TEXT DEFAULT 'Infinite',
-    active INTEGER DEFAULT 1
-  );
-`);
-
-// Seed products if empty
-const count = db.prepare('SELECT COUNT(*) as c FROM products').get().c;
-if (count === 0) {
-  const insert = db.prepare(`
-    INSERT INTO products (id, name, description, price, icon, stock)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-
-  const products = [
-    ['mcfa', 'MCFA', 'Minecraft Full Access account. Instant delivery after payment confirmation.', '₹300', '⛏️', 'Infinite'],
-    ['robux', 'Robux', 'Roblox Robux top-up. Secure transfer via our trusted staff.', '$100', '💎', 'Infinite'],
-    ['nfa', 'NFA', 'Non-Full Access account. Requires 2 invites from our Discord server.', '2 Invites', '🔑', 'Infinite'],
-    ['crunchyroll', 'Crunchyroll Premium', 'Official value ~₹79–99/mo or ₹475/year in India. Competitive access.', 'Contact Staff', '🍥', 'Infinite'],
-    ['ytpremium', 'YouTube Premium', 'Monthly plan. Our rate: ₹100 / month.', '₹100 / mo', '▶️', 'Infinite']
-  ];
-
-  const tx = db.transaction((items) => {
-    for (const p of items) insert.run(...p);
-  });
-  tx(products);
+function load() {
+  try {
+    if (fs.existsSync(DB_PATH)) {
+      return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    }
+  } catch (e) {
+    console.error('DB load error:', e.message);
+  }
+  return structuredClone(defaultData);
 }
+
+function save(data) {
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error('DB save error:', e.message);
+  }
+}
+
+let data = load();
+
+if (!data.products || data.products.length === 0) {
+  data.products = defaultData.products;
+  save(data);
+}
+
+const db = {
+  getUser(id) {
+    return data.users[id] || null;
+  },
+  upsertUser(user) {
+    data.users[user.id] = {
+      ...data.users[user.id],
+      ...user,
+      last_login: new Date().toISOString()
+    };
+    if (!data.users[user.id].created_at) {
+      data.users[user.id].created_at = new Date().toISOString();
+    }
+    save(data);
+    return data.users[user.id];
+  },
+  getProducts() {
+    return data.products.filter(p => p.active);
+  },
+  getProduct(id) {
+    return data.products.find(p => p.id === id) || null;
+  },
+  createTicket(ticket) {
+    data.tickets.unshift(ticket);
+    save(data);
+    return ticket;
+  },
+  getTicketsByUser(userId) {
+    return data.tickets.filter(t => t.user_id === userId);
+  },
+  getTicket(id) {
+    return data.tickets.find(t => t.id === id) || null;
+  },
+  getAllTickets(status = null) {
+    if (status) return data.tickets.filter(t => t.status === status);
+    return data.tickets;
+  },
+  updateTicket(id, updates) {
+    const idx = data.tickets.findIndex(t => t.id === id);
+    if (idx === -1) return null;
+    data.tickets[idx] = {
+      ...data.tickets[idx],
+      ...updates,
+      updated_at: new Date().toISOString()
+    };
+    save(data);
+    return data.tickets[idx];
+  },
+  getStats() {
+    const tickets = data.tickets;
+    return {
+      total: tickets.length,
+      open: tickets.filter(t => t.status === 'open').length,
+      pending: tickets.filter(t => t.status === 'pending_payment').length,
+      paid: tickets.filter(t => t.status === 'paid').length,
+      delivered: tickets.filter(t => t.status === 'delivered').length
+    };
+  }
+};
 
 module.exports = db;
