@@ -19,7 +19,6 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const REDIRECT_URI = `${BASE_URL}/auth/callback`;
 
 // Temporary staff list (User IDs) — works without bot
-// Later when you have admin + bot, we can switch back to role check
 const STAFF_USER_IDS = new Set([
   '1233366635696361562',
   '1497677845781282979',
@@ -38,6 +37,7 @@ const STAFF_USER_IDS = new Set([
   '1528412643038204118'
 ]);
 
+app.set('trust proxy', 1); // Required for Render
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -46,9 +46,11 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'ultimate-rewards-dev-secret',
   resave: false,
   saveUninitialized: false,
+  proxy: true,
   cookie: {
-    secure: BASE_URL.startsWith('https'),
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    secure: true,
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
 
@@ -87,12 +89,8 @@ async function fetchDiscordUser(accessToken) {
 }
 
 async function checkStaffRole(userId) {
-  // 1. First check the hard-coded staff User ID list (works without bot)
-  if (STAFF_USER_IDS.has(String(userId))) {
-    return true;
-  }
+  if (STAFF_USER_IDS.has(String(userId))) return true;
 
-  // 2. If bot token exists, also try role check (for future)
   if (!BOT_TOKEN) return false;
   try {
     const res = await fetch(
@@ -112,7 +110,7 @@ async function checkStaffRole(userId) {
 
 app.get('/auth/login', (req, res) => {
   if (!CLIENT_ID) {
-    return res.status(500).send('Discord Client ID not configured. Check .env');
+    return res.status(500).send('Discord Client ID not configured. Check environment variables.');
   }
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -132,31 +130,13 @@ app.get('/auth/callback', async (req, res) => {
     const discordUser = await fetchDiscordUser(tokenData.access_token);
     const isStaff = await checkStaffRole(discordUser.id);
 
-    // Upsert user
-    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(discordUser.id);
-    if (existing) {
-      db.prepare(`
-        UPDATE users SET username = ?, global_name = ?, avatar = ?, is_staff = ?, last_login = datetime('now')
-        WHERE id = ?
-      `).run(
-        discordUser.username,
-        discordUser.global_name || discordUser.username,
-        discordUser.avatar,
-        isStaff ? 1 : 0,
-        discordUser.id
-      );
-    } else {
-      db.prepare(`
-        INSERT INTO users (id, username, global_name, avatar, is_staff)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(
-        discordUser.id,
-        discordUser.username,
-        discordUser.global_name || discordUser.username,
-        discordUser.avatar,
-        isStaff ? 1 : 0
-      );
-    }
+    db.upsertUser({
+      id: discordUser.id,
+      username: discordUser.username,
+      global_name: discordUser.global_name || discordUser.username,
+      avatar: discordUser.avatar,
+      is_staff: isStaff ? 1 : 0
+    });
 
     req.session.user = {
       id: discordUser.id,
@@ -174,9 +154,7 @@ app.get('/auth/callback', async (req, res) => {
 });
 
 app.get('/auth/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.redirect('/');
-  });
+  req.session.destroy(() => res.redirect('/'));
 });
 
 app.get('/api/me', (req, res) => {
@@ -187,8 +165,7 @@ app.get('/api/me', (req, res) => {
 // ========== Products ==========
 
 app.get('/api/products', (req, res) => {
-  const products = db.prepare('SELECT * FROM products WHERE active = 1').all();
-  res.json(products);
+  res.json(db.getProducts());
 });
 
 // ========== Tickets (Members) ==========
@@ -197,39 +174,37 @@ app.post('/api/tickets', requireLogin, (req, res) => {
   const { product_id, customer_note, payment_proof } = req.body;
   if (!product_id) return res.status(400).json({ error: 'Product required' });
 
-  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(product_id);
+  const product = db.getProduct(product_id);
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
   const id = uuidv4().slice(0, 8).toUpperCase();
 
-  db.prepare(`
-    INSERT INTO tickets (id, user_id, product_id, product_name, price, customer_note, payment_proof, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'open')
-  `).run(
+  const ticket = {
     id,
-    req.session.user.id,
-    product.id,
-    product.name,
-    product.price,
-    customer_note || null,
-    payment_proof || null
-  );
+    user_id: req.session.user.id,
+    product_id: product.id,
+    product_name: product.name,
+    price: product.price,
+    status: 'open',
+    payment_proof: payment_proof || null,
+    customer_note: customer_note || null,
+    staff_note: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
 
+  db.createTicket(ticket);
   res.json({ success: true, ticket_id: id });
 });
 
 app.get('/api/tickets/mine', requireLogin, (req, res) => {
-  const tickets = db.prepare(`
-    SELECT * FROM tickets WHERE user_id = ? ORDER BY created_at DESC
-  `).all(req.session.user.id);
-  res.json(tickets);
+  res.json(db.getTicketsByUser(req.session.user.id));
 });
 
 app.get('/api/tickets/:id', requireLogin, (req, res) => {
-  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
+  const ticket = db.getTicket(req.params.id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
-  // Members can only see their own, staff can see all
   if (ticket.user_id !== req.session.user.id && !req.session.user.is_staff) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -239,25 +214,21 @@ app.get('/api/tickets/:id', requireLogin, (req, res) => {
 // ========== Staff Tickets ==========
 
 app.get('/api/staff/tickets', requireStaff, (req, res) => {
-  const status = req.query.status; // optional filter
-  let tickets;
-  if (status) {
-    tickets = db.prepare(`
-      SELECT t.*, u.username, u.global_name, u.avatar
-      FROM tickets t
-      JOIN users u ON t.user_id = u.id
-      WHERE t.status = ?
-      ORDER BY t.created_at DESC
-    `).all(status);
-  } else {
-    tickets = db.prepare(`
-      SELECT t.*, u.username, u.global_name, u.avatar
-      FROM tickets t
-      JOIN users u ON t.user_id = u.id
-      ORDER BY t.created_at DESC
-    `).all();
-  }
-  res.json(tickets);
+  const status = req.query.status || null;
+  const tickets = db.getAllTickets(status);
+
+  // Attach basic user info
+  const result = tickets.map(t => {
+    const user = db.getUser(t.user_id) || {};
+    return {
+      ...t,
+      username: user.username || 'Unknown',
+      global_name: user.global_name || user.username || 'Unknown',
+      avatar: user.avatar || null
+    };
+  });
+
+  res.json(result);
 });
 
 app.patch('/api/staff/tickets/:id', requireStaff, (req, res) => {
@@ -267,32 +238,19 @@ app.patch('/api/staff/tickets/:id', requireStaff, (req, res) => {
     return res.status(400).json({ error: 'Invalid status' });
   }
 
-  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
-  if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+  const updates = {};
+  if (status) updates.status = status;
+  if (staff_note !== undefined) updates.staff_note = staff_note;
 
-  db.prepare(`
-    UPDATE tickets
-    SET status = COALESCE(?, status),
-        staff_note = COALESCE(?, staff_note),
-        updated_at = datetime('now')
-    WHERE id = ?
-  `).run(status || null, staff_note || null, req.params.id);
-
-  const updated = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
+  const updated = db.updateTicket(req.params.id, updates);
+  if (!updated) return res.status(404).json({ error: 'Ticket not found' });
   res.json(updated);
 });
 
 // ========== Stats (Staff) ==========
 
 app.get('/api/staff/stats', requireStaff, (req, res) => {
-  const stats = {
-    total: db.prepare('SELECT COUNT(*) as c FROM tickets').get().c,
-    open: db.prepare("SELECT COUNT(*) as c FROM tickets WHERE status = 'open'").get().c,
-    pending: db.prepare("SELECT COUNT(*) as c FROM tickets WHERE status = 'pending_payment'").get().c,
-    paid: db.prepare("SELECT COUNT(*) as c FROM tickets WHERE status = 'paid'").get().c,
-    delivered: db.prepare("SELECT COUNT(*) as c FROM tickets WHERE status = 'delivered'").get().c
-  };
-  res.json(stats);
+  res.json(db.getStats());
 });
 
 // ========== Fallback ==========
@@ -303,7 +261,5 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`\n✦ Ultimate Rewards running at ${BASE_URL}`);
-  console.log(`  Login: ${BASE_URL}/auth/login`);
-  console.log(`  Staff role: ${STAFF_ROLE_ID}`);
-  console.log(`  Guild: ${GUILD_ID}\n`);
+  console.log(`  Login: ${BASE_URL}/auth/login\n`);
 });
