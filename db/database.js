@@ -3,6 +3,7 @@ const path = require('path');
 
 const DB_PATH = path.join(__dirname, 'store.json');
 
+// Default data
 const defaultData = {
   users: {},
   tickets: [],
@@ -10,7 +11,7 @@ const defaultData = {
     {
       id: 'mcfa',
       name: 'MCFA',
-      description: 'Minecraft Full Access account. Instant delivery after payment confirmation.',
+      description: 'Premium Minecraft Full Access. Clean accounts, fast delivery by staff.',
       price: '₹300',
       icon: '⛏️',
       stock: 'Infinite',
@@ -19,7 +20,7 @@ const defaultData = {
     {
       id: 'robux',
       name: 'Robux',
-      description: 'Roblox Robux top-up. Secure transfer via our trusted staff.',
+      description: 'Official-style Robux top-up. Secure and handled personally by staff.',
       price: '$100',
       icon: '💎',
       stock: 'Infinite',
@@ -28,7 +29,7 @@ const defaultData = {
     {
       id: 'nfa',
       name: 'NFA',
-      description: 'Non-Full Access account. Requires 2 invites from our Discord server.',
+      description: 'NFA access. Requires 2 invites from our Discord community.',
       price: '2 Invites',
       icon: '🔑',
       stock: 'Infinite',
@@ -37,7 +38,7 @@ const defaultData = {
     {
       id: 'crunchyroll',
       name: 'Crunchyroll Premium',
-      description: 'Official value \~₹79–99/mo or ₹475/year in India. Competitive access.',
+      description: 'Premium anime streaming access. Competitive and reliable.',
       price: 'Contact Staff',
       icon: '🍥',
       stock: 'Infinite',
@@ -46,7 +47,7 @@ const defaultData = {
     {
       id: 'ytpremium',
       name: 'YouTube Premium',
-      description: 'Monthly plan. Our rate: ₹100 / month.',
+      description: 'Ad-free YouTube experience. Monthly premium access.',
       price: '₹100 / mo',
       icon: '▶️',
       stock: 'Infinite',
@@ -76,12 +77,14 @@ function save(data) {
 
 let data = load();
 
+// Ensure products exist
 if (!data.products || data.products.length === 0) {
   data.products = defaultData.products;
   save(data);
 }
 
 const db = {
+  // Users
   getUser(id) {
     return data.users[id] || null;
   },
@@ -97,14 +100,18 @@ const db = {
     save(data);
     return data.users[user.id];
   },
+
+  // Products
   getProducts() {
     return data.products.filter(p => p.active);
   },
   getProduct(id) {
     return data.products.find(p => p.id === id) || null;
   },
+
+  // Tickets
   createTicket(ticket) {
-    data.tickets.unshift(ticket);
+    data.tickets.unshift(ticket); // newest first
     save(data);
     return ticket;
   },
