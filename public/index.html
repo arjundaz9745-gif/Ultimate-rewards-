@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ultimate Rewards | Premium Digital Store</title>
+  <title>Ultimate Rewards | The Best Reward Server</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
@@ -23,6 +23,7 @@
     <div class="nav-links">
       <a href="#products" class="nav-link">Products</a>
       <a href="#payment" class="nav-link">Payment</a>
+      <a href="#about" class="nav-link">About</a>
       <a href="https://discord.gg/5HtXVNpwMA" target="_blank" class="nav-link">Discord</a>
       <a href="/auth/login" class="btn discord" id="loginBtn">Login with Discord</a>
       <a href="/dashboard.html" class="btn secondary hidden" id="dashBtn">My Dashboard</a>
@@ -32,69 +33,111 @@
   <header class="hero">
     <div class="hero-content glass-card">
       <img src="/logo.png" alt="Ultimate Rewards" class="hero-logo">
-      <div class="badge">✦ Premium Digital Goods</div>
+      <div class="badge">✦ THE BEST REWARD SERVER</div>
       <h1>Ultimate <span class="gold-text">Rewards</span></h1>
-      <p class="hero-sub">Login with Discord → Create tickets → Get delivered by staff</p>
+      <p class="hero-sub">
+        Premium digital rewards. Instant delivery. Real staff.  
+        The most trusted place for MCFA, Robux, NFA & exclusive subscriptions.
+      </p>
       <div class="hero-actions">
-        <a href="/auth/login" class="btn discord">Login with Discord</a>
-        <a href="#products" class="btn secondary">Browse Products</a>
+        <a href="/auth/login" class="btn discord" id="heroLogin">Login with Discord</a>
+        <a href="#products" class="btn secondary">Explore Rewards</a>
       </div>
     </div>
   </header>
 
   <section id="products" class="section">
     <div class="section-header">
-      <h2>Our Products</h2>
-      <p>Infinite stock. Login to create a ticket after paying.</p>
+      <h2>Premium Rewards</h2>
+      <p>Hand-selected digital goods. Always in stock. Delivered by real staff.</p>
     </div>
     <div class="products-grid" id="productsGrid"></div>
   </section>
 
   <section id="payment" class="section">
     <div class="section-header">
-      <h2>Payment</h2>
-      <p>Scan QR or pay via UPI, then open a ticket with proof.</p>
+      <h2>Secure Payment</h2>
+      <p>Pay once. Create your ticket. Get delivered fast.</p>
     </div>
     <div class="payment-card glass-card">
       <div class="qr-placeholder">
         <div class="qr-box">
           <img src="/qr.png" alt="UPI QR" class="qr-image">
         </div>
-        <p class="qr-upi">UPI: <strong>9372392022@fam</strong></p>
+        <p class="qr-upi">UPI: <strong id="upiId">9372392022@fam</strong></p>
         <p class="qr-name">Daksh Varma</p>
+        <button class="btn secondary sm" onclick="copyUpi()" style="margin-top:0.5rem">Copy UPI ID</button>
       </div>
       <div class="payment-info">
-        <h3>How it works</h3>
+        <h3>Simple Process</h3>
         <ol>
           <li>Login with your Discord account</li>
-          <li>Pay using the QR / UPI ID above</li>
-          <li>Go to <strong>My Dashboard</strong> and create a ticket with payment proof</li>
-          <li>Staff will verify and deliver your order</li>
+          <li>Pay via the QR or UPI ID shown</li>
+          <div>Open your <strong>Dashboard</strong> and create a ticket with payment proof</div>
+          <li>Our staff verifies and delivers your reward</li>
         </ol>
         <div class="note">
-          Staff members (role-based) automatically get the Staff Panel after login.
+          Every order is handled by real staff. No bots. No delays. Just clean delivery.
         </div>
       </div>
     </div>
   </section>
 
+  <section id="about" class="section">
+    <div class="section-header">
+      <h2>Why Ultimate Rewards</h2>
+      <p>Built for people who want quality, speed and trust.</p>
+    </div>
+    <div class="info-grid">
+      <div class="info-card glass-card">
+        <h3>✦ Real Staff</h3>
+        <p>Every ticket is reviewed by actual staff members. You talk to humans, not automated systems.</p>
+      </div>
+      <div class="info-card glass-card">
+        <h3>✦ Instant Stock</h3>
+        <p>All rewards stay in stock. No waiting for restocks. Order anytime and get processed quickly.</p>
+      </div>
+      <div class="info-card glass-card">
+        <h3>✦ Clean Delivery</h3>
+        <p>We focus on smooth, private delivery. Your order status updates live inside your dashboard.</p>
+      </div>
+      <div class="info-card glass-card">
+        <h3>✦ Discord Community</h3>
+        <p>Join the official server for support, updates and exclusive drops. Active and growing every day.</p>
+      </div>
+    </div>
+  </section>
+
   <footer class="glass">
-    <p>© 2026 Ultimate Rewards • Not affiliated with Minecraft, Roblox, Crunchyroll or YouTube</p>
-    <p><a href="https://discord.gg/5HtXVNpwMA" target="_blank">discord.gg/5HtXVNpwMA</a></p>
+    <p>© 2026 Ultimate Rewards — The Best Reward Server</p>
+    <p style="margin-top:0.4rem"><a href="https://discord.gg/5HtXVNpwMA" target="_blank">discord.gg/5HtXVNpwMA</a></p>
   </footer>
 
   <script>
+    function copyUpi() {
+      navigator.clipboard.writeText('9372392022@fam').then(() => {
+        alert('UPI ID copied: 9372392022@fam');
+      });
+    }
+
     async function loadMe() {
-      const res = await fetch('/api/me');
-      const data = await res.json();
-      if (data.loggedIn) {
-        document.getElementById('loginBtn').classList.add('hidden');
-        document.getElementById('dashBtn').classList.remove('hidden');
-        if (data.user.is_staff) {
-          document.getElementById('dashBtn').href = '/staff.html';
-          document.getElementById('dashBtn').textContent = 'Staff Panel';
+      try {
+        const res = await fetch('/api/me', { credentials: 'include' });
+        const data = await res.json();
+        if (data.loggedIn) {
+          document.getElementById('loginBtn').classList.add('hidden');
+          document.getElementById('heroLogin')?.classList.add('hidden');
+          const dash = document.getElementById('dashBtn');
+          dash.classList.remove('hidden');
+          if (data.user.is_staff) {
+            dash.href = '/staff.html';
+            dash.textContent = 'Staff Panel';
+          } else {
+            dash.href = '/dashboard.html';
+            dash.textContent = 'My Dashboard';
+          }
         }
-      }
+      } catch (e) {}
     }
 
     async function loadProducts() {
@@ -107,8 +150,8 @@
           <h3>${p.name}</h3>
           <p class="product-desc">${p.description}</p>
           <div class="product-price">${p.price}</div>
-          <div class="product-stock">● ${p.stock} stock</div>
-          <a href="/auth/login" class="btn primary full" style="margin-top:0.5rem">Order (Login)</a>
+          <div class="product-stock">● Always available</div>
+          <a href="/auth/login" class="btn primary full" style="margin-top:0.6rem">Claim Reward</a>
         </article>
       `).join('');
     }

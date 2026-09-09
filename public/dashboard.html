@@ -60,7 +60,7 @@
     let products = [];
 
     async function init() {
-      const me = await fetch('/api/me').then(r => r.json());
+      const me = await fetch('/api/me', { credentials: 'include' }).then(r => r.json());
       if (!me.loggedIn) {
         window.location.href = '/auth/login';
         return;
@@ -78,7 +78,7 @@
         <span>${me.user.global_name || me.user.username}</span>
       `;
 
-      products = await fetch('/api/products').then(r => r.json());
+      products = await fetch('/api/products', { credentials: 'include' }).then(r => r.json());
       const sel = document.getElementById('productSelect');
       sel.innerHTML = products.map(p =>
         `<option value="${p.id}">${p.name} — ${p.price}</option>`
@@ -88,7 +88,7 @@
     }
 
     async function loadTickets() {
-      const tickets = await fetch('/api/tickets/mine').then(r => r.json());
+      const tickets = await fetch('/api/tickets/mine', { credentials: 'include' }).then(r => r.json());
       const list = document.getElementById('ticketsList');
       if (!tickets.length) {
         list.innerHTML = '<p style="color:var(--text-muted)">No tickets yet. Create one above after paying.</p>';
@@ -122,6 +122,7 @@
       };
       const res = await fetch('/api/tickets', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });

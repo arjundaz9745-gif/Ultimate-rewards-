@@ -73,7 +73,7 @@
     let currentFilter = '';
 
     async function init() {
-      const me = await fetch('/api/me').then(r => r.json());
+      const me = await fetch('/api/me', { credentials: 'include' }).then(r => r.json());
       if (!me.loggedIn) {
         window.location.href = '/auth/login';
         return;
@@ -98,7 +98,7 @@
     }
 
     async function loadStats() {
-      const s = await fetch('/api/staff/stats').then(r => r.json());
+      const s = await fetch('/api/staff/stats', { credentials: 'include' }).then(r => r.json());
       document.getElementById('statsRow').innerHTML = `
         <div class="stat-card glass-card"><div class="stat-value">${s.total}</div><div class="stat-label">Total</div></div>
         <div class="stat-card glass-card"><div class="stat-value">${s.open}</div><div class="stat-label">Open</div></div>
@@ -110,7 +110,7 @@
 
     async function loadTickets() {
       const url = currentFilter ? `/api/staff/tickets?status=${currentFilter}` : '/api/staff/tickets';
-      const tickets = await fetch(url).then(r => r.json());
+      const tickets = await fetch(url, { credentials: 'include' }).then(r => r.json());
       const list = document.getElementById('ticketsList');
       if (!tickets.length) {
         list.innerHTML = '<p style="color:var(--text-muted)">No tickets found.</p>';
@@ -166,6 +166,7 @@
       const staff_note = document.getElementById('editNote').value;
       await fetch(`/api/staff/tickets/${id}`, {
         method: 'PATCH',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, staff_note })
       });
