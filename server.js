@@ -14,7 +14,7 @@ const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const GUILD_ID = process.env.DISCORD_GUILD_ID || '1542542660458385508';
-const STAFF_ROLE_ID = process.env.STAFF_ROLE_ID || '1543935007339585630';
+const STAFF_ROLE_ID = process.env.STAFF_ROLE_ID || '1548173330794815599';
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const REDIRECT_URI = `${BASE_URL}/auth/callback`;
 
@@ -146,7 +146,7 @@ app.get('/auth/callback', async (req, res) => {
       is_staff: isStaff
     };
 
-    res.redirect(isStaff ? '/staff.html' : '/dashboard.html');
+    res.redirect(isStaff ? '/staff.html' : '/#order');
   } catch (err) {
     console.error('OAuth error:', err);
     res.redirect('/?error=auth_failed');
@@ -178,6 +178,18 @@ app.post('/api/tickets', requireLogin, (req, res) => {
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
   const id = uuidv4().slice(0, 8).toUpperCase();
+  const now = new Date().toISOString();
+  const messages = [];
+  if (customer_note || payment_proof) {
+    messages.push({
+      id: uuidv4().slice(0, 8),
+      from: 'customer',
+      user_id: req.session.user.id,
+      name: req.session.user.global_name || req.session.user.username,
+      text: [customer_note, payment_proof ? ('Proof: ' + payment_proof) : null].filter(Boolean).join('\n'),
+      at: now
+    });
+  }
 
   const ticket = {
     id,
@@ -189,8 +201,9 @@ app.post('/api/tickets', requireLogin, (req, res) => {
     payment_proof: payment_proof || null,
     customer_note: customer_note || null,
     staff_note: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+    messages,
+    created_at: now,
+    updated_at: now
   };
 
   db.createTicket(ticket);
@@ -244,6 +257,32 @@ app.patch('/api/staff/tickets/:id', requireStaff, (req, res) => {
 
   const updated = db.updateTicket(req.params.id, updates);
   if (!updated) return res.status(404).json({ error: 'Ticket not found' });
+  res.json(updated);
+});
+
+// ========== Ticket Messages ==========
+
+app.post('/api/tickets/:id/messages', requireLogin, (req, res) => {
+  const ticket = db.getTicket(req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+  const isOwner = ticket.user_id === req.session.user.id;
+  const isStaff = req.session.user.is_staff;
+  if (!isOwner && !isStaff) return res.status(403).json({ error: 'Forbidden' });
+
+  const text = (req.body.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Message required' });
+
+  const message = {
+    id: uuidv4().slice(0, 8),
+    from: isStaff ? 'staff' : 'customer',
+    user_id: req.session.user.id,
+    name: req.session.user.global_name || req.session.user.username,
+    text,
+    at: new Date().toISOString()
+  };
+
+  const updated = db.addMessage(req.params.id, message);
   res.json(updated);
 });
 
