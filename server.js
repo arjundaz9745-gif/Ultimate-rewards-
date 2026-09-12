@@ -89,21 +89,27 @@ async function fetchDiscordUser(accessToken) {
 }
 
 async function checkStaffRole(userId) {
-  if (STAFF_USER_IDS.has(String(userId))) return true;
-
-  if (!BOT_TOKEN) return false;
-  try {
-    const res = await fetch(
-      `https://discord.com/api/v10/guilds/${GUILD_ID}/members/${userId}`,
-      { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
-    );
-    if (!res.ok) return false;
-    const member = await res.json();
-    return Array.isArray(member.roles) && member.roles.includes(STAFF_ROLE_ID);
-  } catch (e) {
-    console.error('Role check error:', e.message);
-    return false;
+  // Primary: Discord role via bot
+  if (BOT_TOKEN) {
+    try {
+      const res = await fetch(
+        `https://discord.com/api/v10/guilds/${GUILD_ID}/members/${userId}`,
+        { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
+      );
+      if (res.ok) {
+        const member = await res.json();
+        if (Array.isArray(member.roles) && member.roles.includes(STAFF_ROLE_ID)) {
+          return true;
+        }
+      } else {
+        console.error('Role check HTTP', res.status);
+      }
+    } catch (e) {
+      console.error('Role check error:', e.message);
+    }
   }
+  // Fallback: hardcoded staff user IDs
+  return STAFF_USER_IDS.has(String(userId));
 }
 
 // ========== Auth Routes ==========
