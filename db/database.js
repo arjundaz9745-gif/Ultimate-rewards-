@@ -3,7 +3,6 @@ const path = require('path');
 
 const DB_PATH = path.join(__dirname, 'store.json');
 
-// Default data
 const defaultData = {
   users: {},
   tickets: [],
@@ -11,8 +10,8 @@ const defaultData = {
     {
       id: 'mcfa',
       name: 'MCFA',
-      description: 'Premium Minecraft Full Access. Clean accounts, fast delivery by staff.',
-      price: '₹300',
+      description: 'Minecraft Full Access. Delivered by staff.',
+      price: '₹550',
       icon: '⛏️',
       stock: 'Infinite',
       active: 1
@@ -20,7 +19,7 @@ const defaultData = {
     {
       id: 'robux',
       name: 'Robux',
-      description: 'Official-style Robux top-up. Secure and handled personally by staff.',
+      description: 'Roblox Robux top-up via staff.',
       price: '$100',
       icon: '💎',
       stock: 'Infinite',
@@ -29,7 +28,7 @@ const defaultData = {
     {
       id: 'nfa',
       name: 'NFA',
-      description: 'NFA access. Requires 2 invites from our Discord community.',
+      description: 'Non-Full Access. 2 invites required.',
       price: '2 Invites',
       icon: '🔑',
       stock: 'Infinite',
@@ -38,7 +37,7 @@ const defaultData = {
     {
       id: 'crunchyroll',
       name: 'Crunchyroll Premium',
-      description: 'Premium anime streaming access. Competitive and reliable.',
+      description: 'Premium anime streaming access.',
       price: 'Contact Staff',
       icon: '🍥',
       stock: 'Infinite',
@@ -47,7 +46,7 @@ const defaultData = {
     {
       id: 'ytpremium',
       name: 'YouTube Premium',
-      description: 'Ad-free YouTube experience. Monthly premium access.',
+      description: 'Ad-free YouTube. ₹100 / month.',
       price: '₹100 / mo',
       icon: '▶️',
       stock: 'Infinite',
@@ -77,14 +76,38 @@ function save(data) {
 
 let data = load();
 
-// Ensure products exist
 if (!data.products || data.products.length === 0) {
   data.products = defaultData.products;
   save(data);
 }
 
+// Migrate old tickets that don't have messages array
+data.tickets.forEach(t => {
+  if (!Array.isArray(t.messages)) {
+    t.messages = [];
+    if (t.customer_note) {
+      t.messages.push({
+        id: 'm1',
+        from: 'customer',
+        user_id: t.user_id,
+        text: t.customer_note,
+        at: t.created_at
+      });
+    }
+    if (t.staff_note) {
+      t.messages.push({
+        id: 'm2',
+        from: 'staff',
+        user_id: 'staff',
+        text: t.staff_note,
+        at: t.updated_at || t.created_at
+      });
+    }
+  }
+});
+save(data);
+
 const db = {
-  // Users
   getUser(id) {
     return data.users[id] || null;
   },
@@ -100,18 +123,15 @@ const db = {
     save(data);
     return data.users[user.id];
   },
-
-  // Products
   getProducts() {
     return data.products.filter(p => p.active);
   },
   getProduct(id) {
     return data.products.find(p => p.id === id) || null;
   },
-
-  // Tickets
   createTicket(ticket) {
-    data.tickets.unshift(ticket); // newest first
+    if (!ticket.messages) ticket.messages = [];
+    data.tickets.unshift(ticket);
     save(data);
     return ticket;
   },
@@ -133,6 +153,15 @@ const db = {
       ...updates,
       updated_at: new Date().toISOString()
     };
+    save(data);
+    return data.tickets[idx];
+  },
+  addMessage(ticketId, message) {
+    const idx = data.tickets.findIndex(t => t.id === ticketId);
+    if (idx === -1) return null;
+    if (!data.tickets[idx].messages) data.tickets[idx].messages = [];
+    data.tickets[idx].messages.push(message);
+    data.tickets[idx].updated_at = new Date().toISOString();
     save(data);
     return data.tickets[idx];
   },
