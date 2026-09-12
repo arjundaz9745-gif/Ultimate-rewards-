@@ -28,10 +28,32 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   line-height: 1.65;
-  background-image:
-    radial-gradient(ellipse 90% 60% at 50% -30%, rgba(26, 55, 110, 0.35), transparent),
-    radial-gradient(ellipse 50% 40% at 100% 80%, rgba(232, 200, 74, 0.04), transparent),
-    linear-gradient(180deg, #05060a 0%, #080c14 50%, #05060a 100%);
+}
+
+/* Blurred landscape / mobile night backgrounds */
+.bg-scene {
+  position: fixed;
+  inset: -20px;
+  z-index: -3;
+  background-image: url('/bg-desktop.jpg');
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  filter: blur(14px);
+  transform: scale(1.08);
+}
+.bg-scene-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background: rgba(5, 6, 10, 0.50);
+  pointer-events: none;
+}
+@media (max-width: 768px) {
+  .bg-scene {
+    background-image: url('/bg-mobile.jpg');
+    filter: blur(12px);
+  }
 }
 
 .bg-blobs {
