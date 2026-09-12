@@ -3,16 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Staff Panel | Ultimate Rewards</title>
+  <title>Staff | Ultimate Rewards</title>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="bg-blobs">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-  </div>
-
+  <div class="bg-blobs"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
   <nav class="navbar glass">
     <div class="nav-brand">
       <img src="/logo.png" alt="UR" class="logo-img">
@@ -20,20 +16,20 @@
     </div>
     <div class="nav-links">
       <a href="/" class="nav-link">Home</a>
-      <a href="/dashboard.html" class="nav-link">Member View</a>
+      <a href="/dashboard.html" class="nav-link">Member view</a>
       <a href="/auth/logout" class="btn secondary sm">Logout</a>
     </div>
   </nav>
 
   <div class="page-wrap">
     <div class="page-header">
-      <h1>Staff Dashboard</h1>
-      <div class="user-pill" id="userPill">Loading...</div>
+      <h1>Staff</h1>
+      <div class="user-pill" id="userPill">...</div>
     </div>
 
     <div class="stats-row" id="statsRow"></div>
 
-    <div style="margin-bottom:1.25rem; display:flex; gap:0.6rem; flex-wrap:wrap;">
+    <div style="margin-bottom:1.25rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
       <button class="btn sm secondary filter-btn" data-status="">All</button>
       <button class="btn sm secondary filter-btn" data-status="open">Open</button>
       <button class="btn sm secondary filter-btn" data-status="pending_payment">Pending</button>
@@ -41,16 +37,15 @@
       <button class="btn sm secondary filter-btn" data-status="delivered">Delivered</button>
     </div>
 
-    <div id="ticketsList">Loading tickets...</div>
+    <div id="ticketsList">Loading...</div>
   </div>
 
-  <!-- Edit Modal -->
-  <div id="editModal" class="hidden" style="position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,0.7);">
-    <div class="glass-card" style="max-width:420px;width:100%;padding:1.75rem;position:relative;">
+  <div id="editModal" class="hidden" style="position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);">
+    <div class="glass-card" style="max-width:480px;width:100%;padding:1.75rem;position:relative;max-height:90vh;overflow-y:auto;">
       <button onclick="closeModal()" style="position:absolute;top:0.8rem;right:1rem;background:none;border:none;color:var(--text-muted);font-size:1.4rem;cursor:pointer;">×</button>
-      <h2 style="font-family:var(--display);color:var(--gold-light);margin-bottom:1rem;">Update Ticket</h2>
-      <input type="hidden" id="editId">
-      <div class="form-group">
+      <h2 style="font-family:var(--display);color:var(--gold-light);margin-bottom:0.5rem;" id="modalTitle">Ticket</h2>
+      <div id="modalBody"></div>
+      <div class="form-group" style="margin-top:1rem;">
         <label>Status</label>
         <select id="editStatus">
           <option value="open">Open</option>
@@ -62,37 +57,32 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Staff Note</label>
-        <textarea id="editNote" placeholder="Internal note or message to customer..."></textarea>
+        <label>Reply as staff</label>
+        <textarea id="editReply" placeholder="Message to customer..."></textarea>
       </div>
-      <button class="btn primary full" onclick="saveTicket()">Save Changes</button>
+      <button class="btn primary full" onclick="saveTicket()">Save & Send</button>
     </div>
   </div>
 
   <script>
     let currentFilter = '';
+    let currentTicket = null;
+
+    function escapeHtml(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
 
     async function init() {
       const me = await fetch('/api/me', { credentials: 'include' }).then(r => r.json());
-      if (!me.loggedIn) {
-        window.location.href = '/auth/login';
-        return;
-      }
+      if (!me.loggedIn) return location.href = '/auth/login';
       if (!me.user.is_staff) {
-        alert('Staff only. You do not have the required role.');
-        window.location.href = '/dashboard.html';
-        return;
+        alert('Staff only');
+        return location.href = '/dashboard.html';
       }
-
       const avatar = me.user.avatar
         ? `https://cdn.discordapp.com/avatars/${me.user.id}/${me.user.avatar}.png?size=64`
         : 'https://cdn.discordapp.com/embed/avatars/0.png';
-
-      document.getElementById('userPill').innerHTML = `
-        <img src="${avatar}" class="user-avatar" alt="">
-        <span>${me.user.global_name || me.user.username} · Staff</span>
-      `;
-
+      document.getElementById('userPill').innerHTML = `<img src="${avatar}" class="user-avatar"><span>${me.user.global_name || me.user.username}</span>`;
       loadStats();
       loadTickets();
     }
@@ -108,12 +98,22 @@
       `;
     }
 
+    function renderMessages(msgs) {
+      if (!msgs || !msgs.length) return '<p style="color:var(--text-muted);font-size:0.9rem;">No messages yet</p>';
+      return `<div class="messages">${msgs.map(m => `
+        <div class="msg ${m.from}">
+          <div class="msg-meta">${escapeHtml(m.name || m.from)} · ${new Date(m.at).toLocaleString()}</div>
+          <div>${escapeHtml(m.text)}</div>
+        </div>
+      `).join('')}</div>`;
+    }
+
     async function loadTickets() {
       const url = currentFilter ? `/api/staff/tickets?status=${currentFilter}` : '/api/staff/tickets';
       const tickets = await fetch(url, { credentials: 'include' }).then(r => r.json());
       const list = document.getElementById('ticketsList');
       if (!tickets.length) {
-        list.innerHTML = '<p style="color:var(--text-muted)">No tickets found.</p>';
+        list.innerHTML = '<p style="color:var(--text-muted)">No tickets</p>';
         return;
       }
       list.innerHTML = tickets.map(t => {
@@ -122,25 +122,17 @@
           : 'https://cdn.discordapp.com/embed/avatars/0.png';
         return `
           <div class="ticket-card glass-card">
-            <div>
-              <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem;">
-                <img src="${avatar}" style="width:24px;height:24px;border-radius:50%;">
-                <span>${t.global_name || t.username}</span>
+            <div style="width:100%">
+              <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;flex-wrap:wrap;">
+                <img src="${avatar}" style="width:26px;height:26px;border-radius:50%;">
+                <span>${escapeHtml(t.global_name || t.username)}</span>
                 <span class="ticket-id">#${t.id}</span>
+                <span class="status ${t.status}">${t.status.replace('_',' ')}</span>
               </div>
-              <strong>${t.product_name}</strong> · ${t.price}
-              <div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.3rem;">
-                ${t.payment_proof ? `Proof: ${t.payment_proof}<br>` : ''}
-                ${t.customer_note ? `Customer: ${t.customer_note}<br>` : ''}
-                ${t.staff_note ? `<em>Staff note: ${t.staff_note}</em>` : ''}
-              </div>
-              <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;">
-                ${new Date(t.created_at + 'Z').toLocaleString()}
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;">
-              <span class="status ${t.status}">${t.status.replace('_',' ')}</span>
-              <button class="btn sm primary" onclick='openEdit(${JSON.stringify(t)})'>Manage</button>
+              <strong>${escapeHtml(t.product_name)}</strong> · ${escapeHtml(t.price)}
+              ${t.payment_proof ? `<div style="font-size:0.85rem;color:var(--text-muted);">Proof: ${escapeHtml(t.payment_proof)}</div>` : ''}
+              ${renderMessages(t.messages)}
+              <button class="btn sm primary" style="margin-top:0.5rem" onclick='openEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'>Open</button>
             </div>
           </div>
         `;
@@ -148,9 +140,17 @@
     }
 
     function openEdit(t) {
-      document.getElementById('editId').value = t.id;
+      currentTicket = t;
+      document.getElementById('modalTitle').textContent = `#${t.id} · ${t.product_name}`;
       document.getElementById('editStatus').value = t.status;
-      document.getElementById('editNote').value = t.staff_note || '';
+      document.getElementById('editReply').value = '';
+      document.getElementById('modalBody').innerHTML = `
+        <div style="font-size:0.9rem;color:var(--text-muted);margin-bottom:0.5rem;">
+          ${escapeHtml(t.global_name || t.username)} · ${escapeHtml(t.price)}
+          ${t.payment_proof ? `<br>Proof: ${escapeHtml(t.payment_proof)}` : ''}
+        </div>
+        ${renderMessages(t.messages)}
+      `;
       document.getElementById('editModal').classList.remove('hidden');
       document.getElementById('editModal').style.display = 'flex';
     }
@@ -158,18 +158,30 @@
     function closeModal() {
       document.getElementById('editModal').classList.add('hidden');
       document.getElementById('editModal').style.display = 'none';
+      currentTicket = null;
     }
 
     async function saveTicket() {
-      const id = document.getElementById('editId').value;
+      if (!currentTicket) return;
       const status = document.getElementById('editStatus').value;
-      const staff_note = document.getElementById('editNote').value;
-      await fetch(`/api/staff/tickets/${id}`, {
+      const reply = document.getElementById('editReply').value.trim();
+
+      await fetch(`/api/staff/tickets/${currentTicket.id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, staff_note })
+        body: JSON.stringify({ status })
       });
+
+      if (reply) {
+        await fetch(`/api/tickets/${currentTicket.id}/messages`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: reply })
+        });
+      }
+
       closeModal();
       loadStats();
       loadTickets();

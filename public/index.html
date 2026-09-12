@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ultimate Rewards | The Best Reward Server</title>
+  <title>Ultimate Reward | Premium Digital Store</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
@@ -14,70 +14,121 @@
     <div class="blob blob-2"></div>
     <div class="blob blob-3"></div>
   </div>
+  <div class="float-icons" aria-hidden="true">
+    <span class="fi fi-1">⛏️</span>
+    <span class="fi fi-2">▶️</span>
+    <span class="fi fi-3">🍥</span>
+    <span class="fi fi-4">💎</span>
+    <span class="fi fi-5">🎁</span>
+    <span class="fi fi-6">▶️</span>
+    <span class="fi fi-7">🍥</span>
+    <span class="fi fi-8">💎</span>
+  </div>
 
   <nav class="navbar glass">
     <div class="nav-brand">
-      <img src="/logo.png" alt="Ultimate Rewards" class="logo-img">
-      <span class="brand-text">Ultimate Rewards</span>
+      <img src="/logo.png" alt="Ultimate Reward" class="logo-img">
+      <span class="brand-text">Ultimate <span>Reward</span></span>
     </div>
     <div class="nav-links">
       <a href="#products" class="nav-link">Products</a>
       <a href="#payment" class="nav-link">Payment</a>
       <a href="#about" class="nav-link">About</a>
+      <a href="#faq" class="nav-link">FAQ</a>
       <a href="https://discord.gg/5HtXVNpwMA" target="_blank" class="nav-link">Discord</a>
-      <a href="/auth/login" class="btn discord" id="loginBtn">Login with Discord</a>
-      <a href="/dashboard.html" class="btn secondary hidden" id="dashBtn">My Dashboard</a>
+      <a href="/auth/login" class="btn discord" id="loginBtn">Login</a>
+      <a href="/staff.html" class="btn primary hidden" id="staffBtn">Staff Panel</a>
+      <a href="/auth/logout" class="btn secondary sm hidden" id="logoutBtn">Logout</a>
     </div>
   </nav>
 
   <header class="hero">
     <div class="hero-content glass-card">
-      <img src="/logo.png" alt="Ultimate Rewards" class="hero-logo">
-      <div class="badge">✦ THE BEST REWARD SERVER</div>
-      <h1>Ultimate <span class="gold-text">Rewards</span></h1>
+      <img src="/logo.png" alt="Ultimate Reward" class="hero-logo">
+      <div class="badge">EST. TRUSTED REWARD SERVER</div>
+      <h1>Ultimate <span class="gold-text">Reward</span></h1>
       <p class="hero-sub">
-        Premium digital rewards. Instant delivery. Real staff.  
-        The most trusted place for MCFA, Robux, NFA & exclusive subscriptions.
+        Premium digital rewards — MCFA, Robux, NFA, Crunchyroll, YouTube Premium & more.<br>
+        Pay on site. Staff handle every order through private tickets.
       </p>
       <div class="hero-actions">
         <a href="/auth/login" class="btn discord" id="heroLogin">Login with Discord</a>
-        <a href="#products" class="btn secondary">Explore Rewards</a>
+        <a href="#products" class="btn secondary">Browse Products</a>
       </div>
     </div>
   </header>
 
+  <section class="section" style="padding-top:0;">
+    <div class="stats-row" style="max-width:920px;margin:0 auto;">
+      <div class="stat-card glass-card"><div class="stat-value">∞</div><div class="stat-label">In stock</div></div>
+      <div class="stat-card glass-card"><div class="stat-value">Staff</div><div class="stat-label">Real humans</div></div>
+      <div class="stat-card glass-card"><div class="stat-value">UPI</div><div class="stat-label">Easy pay</div></div>
+      <div class="stat-card glass-card"><div class="stat-value">24/7</div><div class="stat-label">Ticket system</div></div>
+    </div>
+  </section>
+
   <section id="products" class="section">
     <div class="section-header">
-      <h2>Premium Rewards</h2>
-      <p>Hand-selected digital goods. Always in stock. Delivered by real staff.</p>
+      <h2>Our <span>Products</span></h2>
+      <p>Select a product, pay via UPI, then open a ticket so staff can deliver.</p>
     </div>
     <div class="products-grid" id="productsGrid"></div>
   </section>
 
+  <!-- Order form: members use this (no member dashboard) -->
+  <section id="order" class="section">
+    <div class="section-header">
+      <h2>Place an <span>Order</span></h2>
+      <p>Login first, pay, then submit proof here. Staff only manage tickets in Staff Panel.</p>
+    </div>
+    <div class="glass-card" style="padding:1.75rem; max-width:560px; margin:0 auto;" id="orderBox">
+      <p id="orderNeedLogin" style="color:var(--text-muted); text-align:center;">
+        <a href="/auth/login" class="btn discord">Login with Discord</a>
+        <br><br>You must login before creating an order ticket.
+      </p>
+      <form id="orderForm" class="hidden">
+        <div class="form-group">
+          <label>Product</label>
+          <select id="productSelect" required></select>
+        </div>
+        <div class="form-group">
+          <label>Payment proof (UTR / transaction ID)</label>
+          <input type="text" id="paymentProof" placeholder="e.g. 123456789012" required>
+        </div>
+        <div class="form-group">
+          <label>Message to staff (optional)</label>
+          <textarea id="customerNote" placeholder="Anything staff should know..."></textarea>
+        </div>
+        <button type="submit" class="btn primary full">Submit order ticket</button>
+        <p id="orderMsg" class="hidden" style="margin-top:1rem; color:var(--success); text-align:center;"></p>
+      </form>
+    </div>
+  </section>
+
   <section id="payment" class="section">
     <div class="section-header">
-      <h2>Secure Payment</h2>
-      <p>Pay once. Create your ticket. Get delivered fast.</p>
+      <h2>Payment</h2>
+      <p>Scan QR or pay to the UPI ID, then submit your order ticket above.</p>
     </div>
     <div class="payment-card glass-card">
       <div class="qr-placeholder">
         <div class="qr-box">
           <img src="/qr.png" alt="UPI QR" class="qr-image">
         </div>
-        <p class="qr-upi">UPI: <strong id="upiId">9372392022@fam</strong></p>
+        <p class="qr-upi">UPI: <strong>9372392022@fam</strong></p>
         <p class="qr-name">Daksh Varma</p>
-        <button class="btn secondary sm" onclick="copyUpi()" style="margin-top:0.5rem">Copy UPI ID</button>
+        <button type="button" class="btn secondary sm" onclick="copyUpi()">Copy UPI</button>
       </div>
       <div class="payment-info">
-        <h3>Simple Process</h3>
+        <h3>How to order</h3>
         <ol>
-          <li>Login with your Discord account</li>
-          <li>Pay via the QR or UPI ID shown</li>
-          <div>Open your <strong>Dashboard</strong> and create a ticket with payment proof</div>
-          <li>Our staff verifies and delivers your reward</li>
+          <li>Login with Discord</li>
+          <li>Pay the product price via QR / UPI</li>
+          <li>Fill the order form with product + proof</li>
+          <li>Staff opens your ticket, confirms payment, and delivers</li>
         </ol>
         <div class="note">
-          Every order is handled by real staff. No bots. No delays. Just clean delivery.
+          Members do not manage tickets. Only staff can view and process orders in the Staff Panel.
         </div>
       </div>
     </div>
@@ -85,76 +136,145 @@
 
   <section id="about" class="section">
     <div class="section-header">
-      <h2>Why Ultimate Rewards</h2>
-      <p>Built for people who want quality, speed and trust.</p>
+      <h2>About <span>Ultimate Reward</span></h2>
+      <p>Who we are and how we work.</p>
+    </div>
+    <div class="prose-block glass-card">
+      <h3>Welcome</h3>
+      <p>
+        Ultimate Reward is a Discord-based digital reward community focused on fast, clear delivery of
+        premium products like Minecraft access (MCFA), Robux, NFA, Crunchyroll Premium, YouTube Premium,
+        and similar digital goods. We built this website so payments and order tracking stay organized
+        while real staff handle every ticket by hand.
+      </p>
+      <h3>Why people use us</h3>
+      <p>
+        Many reward servers rely only on chat chaos. Here, every paid order becomes a ticket. Staff see
+        the product, the proof, and the conversation in one place. You always know the status:
+        open, pending payment, paid, or delivered. That keeps both customers and staff accountable.
+      </p>
+      <h3>How staff work</h3>
+      <p>
+        Only verified staff can open the Staff Panel. They can read every ticket, reply to customers,
+        update status, and mark orders as paid or delivered after they complete the reward. Members
+        cannot access staff tools — they only submit orders and wait for staff replies through the system.
+      </p>
+      <h3>Payment & safety</h3>
+      <p>
+        We use UPI for simple local payments. Always pay the listed amount, keep your UTR, and attach it
+        when you submit the order form. Never share passwords or account recovery codes in public chat.
+        If something looks wrong, open Discord support or wait for staff on your ticket.
+      </p>
+      <h3>Community</h3>
+      <p>
+        Join our Discord for announcements, giveaways, partnerships, and live help:
+        <a href="https://discord.gg/5HtXVNpwMA" target="_blank" style="color:var(--yellow);">discord.gg/5HtXVNpwMA</a>.
+        The website handles orders; the server is where the community lives.
+      </p>
+      <h3>Our promise</h3>
+      <p>
+        We aim for clear pricing, real human staff, and ticket-based delivery. We are not affiliated with
+        Minecraft, Mojang, Roblox, Crunchyroll, YouTube, Netflix, or Discord. Products are digital access
+        services provided by our team under our own terms.
+      </p>
+    </div>
+  </section>
+
+  <section id="faq" class="section">
+    <div class="section-header">
+      <h2>FAQ</h2>
     </div>
     <div class="info-grid">
       <div class="info-card glass-card">
-        <h3>✦ Real Staff</h3>
-        <p>Every ticket is reviewed by actual staff members. You talk to humans, not automated systems.</p>
+        <h3>Who can see tickets?</h3>
+        <p>Only staff. Members submit an order; staff process it in the Staff Panel.</p>
       </div>
       <div class="info-card glass-card">
-        <h3>✦ Instant Stock</h3>
-        <p>All rewards stay in stock. No waiting for restocks. Order anytime and get processed quickly.</p>
+        <h3>I paid — what next?</h3>
+        <p>Login, open Place an Order, select product, paste UTR, submit. Staff will take it from there.</p>
       </div>
       <div class="info-card glass-card">
-        <h3>✦ Clean Delivery</h3>
-        <p>We focus on smooth, private delivery. Your order status updates live inside your dashboard.</p>
+        <h3>How long for delivery?</h3>
+        <p>Depends on staff online time. Check Discord if you need a status update after submitting.</p>
       </div>
       <div class="info-card glass-card">
-        <h3>✦ Discord Community</h3>
-        <p>Join the official server for support, updates and exclusive drops. Active and growing every day.</p>
+        <h3>Wrong amount?</h3>
+        <p>Still submit a ticket with proof and explain in the message box. Staff will guide you.</p>
       </div>
     </div>
   </section>
 
   <footer class="glass">
-    <p>© 2026 Ultimate Rewards — The Best Reward Server</p>
-    <p style="margin-top:0.4rem"><a href="https://discord.gg/5HtXVNpwMA" target="_blank">discord.gg/5HtXVNpwMA</a></p>
+    <p>Ultimate Reward — not affiliated with Minecraft, Roblox, Crunchyroll, YouTube or Discord</p>
+    <p><a href="https://discord.gg/5HtXVNpwMA" target="_blank">discord.gg/5HtXVNpwMA</a></p>
   </footer>
 
   <script>
     function copyUpi() {
-      navigator.clipboard.writeText('9372392022@fam').then(() => {
-        alert('UPI ID copied: 9372392022@fam');
-      });
+      navigator.clipboard.writeText('9372392022@fam').then(() => alert('Copied: 9372392022@fam'));
     }
 
     async function loadMe() {
       try {
         const res = await fetch('/api/me', { credentials: 'include' });
         const data = await res.json();
-        if (data.loggedIn) {
-          document.getElementById('loginBtn').classList.add('hidden');
-          document.getElementById('heroLogin')?.classList.add('hidden');
-          const dash = document.getElementById('dashBtn');
-          dash.classList.remove('hidden');
-          if (data.user.is_staff) {
-            dash.href = '/staff.html';
-            dash.textContent = 'Staff Panel';
-          } else {
-            dash.href = '/dashboard.html';
-            dash.textContent = 'My Dashboard';
-          }
+        if (!data.loggedIn) return;
+
+        document.getElementById('loginBtn').classList.add('hidden');
+        document.getElementById('heroLogin')?.classList.add('hidden');
+        document.getElementById('logoutBtn').classList.remove('hidden');
+
+        if (data.user.is_staff) {
+          document.getElementById('staffBtn').classList.remove('hidden');
         }
+
+        // Members: show order form only (no dashboard)
+        document.getElementById('orderNeedLogin').classList.add('hidden');
+        document.getElementById('orderForm').classList.remove('hidden');
       } catch (e) {}
     }
 
     async function loadProducts() {
       const res = await fetch('/api/products');
       const products = await res.json();
-      const grid = document.getElementById('productsGrid');
-      grid.innerHTML = products.map(p => `
+      document.getElementById('productsGrid').innerHTML = products.map(p => `
         <article class="product-card glass-card">
           <div class="product-icon">${p.icon || '🎁'}</div>
           <h3>${p.name}</h3>
           <p class="product-desc">${p.description}</p>
           <div class="product-price">${p.price}</div>
-          <div class="product-stock">● Always available</div>
-          <a href="/auth/login" class="btn primary full" style="margin-top:0.6rem">Claim Reward</a>
+          <a href="#order" class="btn primary full" style="margin-top:0.5rem">Order</a>
         </article>
       `).join('');
+      const sel = document.getElementById('productSelect');
+      if (sel) {
+        sel.innerHTML = products.map(p => `<option value="${p.id}">${p.name} — ${p.price}</option>`).join('');
+      }
     }
+
+    document.getElementById('orderForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        product_id: document.getElementById('productSelect').value,
+        payment_proof: document.getElementById('paymentProof').value,
+        customer_note: document.getElementById('customerNote').value
+      };
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.success) {
+        const msg = document.getElementById('orderMsg');
+        msg.textContent = 'Ticket #' + data.ticket_id + ' submitted. Staff will process it.';
+        msg.classList.remove('hidden');
+        e.target.reset();
+      } else {
+        alert(data.error || 'Failed — login first');
+      }
+    });
 
     loadMe();
     loadProducts();

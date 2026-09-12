@@ -3,16 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My Dashboard | Ultimate Rewards</title>
+  <title>My Orders | Ultimate Rewards</title>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="bg-blobs">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-  </div>
-
+  <div class="bg-blobs"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
   <nav class="navbar glass">
     <div class="nav-brand">
       <img src="/logo.png" alt="UR" class="logo-img">
@@ -26,32 +22,30 @@
 
   <div class="page-wrap">
     <div class="page-header">
-      <h1>My Dashboard</h1>
-      <div class="user-pill" id="userPill">Loading...</div>
+      <h1>My Orders</h1>
+      <div class="user-pill" id="userPill">...</div>
     </div>
 
-    <!-- Create Ticket -->
     <div class="glass-card" style="padding:1.75rem; margin-bottom:2rem;">
-      <h2 style="font-family:var(--display); color:var(--gold-light); margin-bottom:1rem;">Create New Ticket</h2>
+      <h2 style="font-family:var(--display); color:var(--gold-light); margin-bottom:1rem;">New Order Ticket</h2>
       <form id="ticketForm">
         <div class="form-group">
           <label>Product</label>
           <select id="productSelect" required></select>
         </div>
         <div class="form-group">
-          <label>Payment Proof (UPI transaction ID / screenshot link)</label>
-          <input type="text" id="paymentProof" placeholder="e.g. TXN123456 or image link" required>
+          <label>Payment proof (UTR / link)</label>
+          <input type="text" id="paymentProof" placeholder="UTR or screenshot link" required>
         </div>
         <div class="form-group">
-          <label>Note (optional)</label>
-          <textarea id="customerNote" placeholder="Any extra info for staff..."></textarea>
+          <label>Message (optional)</label>
+          <textarea id="customerNote" placeholder="Any extra info..."></textarea>
         </div>
-        <button type="submit" class="btn primary">Submit Ticket</button>
+        <button type="submit" class="btn primary">Create Ticket</button>
       </form>
-      <p id="ticketMsg" style="margin-top:1rem; color:var(--success);" class="hidden"></p>
+      <p id="ticketMsg" class="hidden" style="margin-top:1rem; color:var(--success);"></p>
     </div>
 
-    <!-- My Tickets -->
     <h2 style="font-family:var(--display); color:var(--gold-light); margin-bottom:1rem;">My Tickets</h2>
     <div id="ticketsList">Loading...</div>
   </div>
@@ -61,56 +55,72 @@
 
     async function init() {
       const me = await fetch('/api/me', { credentials: 'include' }).then(r => r.json());
-      if (!me.loggedIn) {
-        window.location.href = '/auth/login';
-        return;
-      }
-      if (me.user.is_staff) {
-        // optional: still allow staff to use member dashboard
-      }
+      if (!me.loggedIn) return location.href = '/auth/login';
 
       const avatar = me.user.avatar
         ? `https://cdn.discordapp.com/avatars/${me.user.id}/${me.user.avatar}.png?size=64`
         : 'https://cdn.discordapp.com/embed/avatars/0.png';
-
-      document.getElementById('userPill').innerHTML = `
-        <img src="${avatar}" class="user-avatar" alt="">
-        <span>${me.user.global_name || me.user.username}</span>
-      `;
+      document.getElementById('userPill').innerHTML = `<img src="${avatar}" class="user-avatar"><span>${me.user.global_name || me.user.username}</span>`;
 
       products = await fetch('/api/products', { credentials: 'include' }).then(r => r.json());
-      const sel = document.getElementById('productSelect');
-      sel.innerHTML = products.map(p =>
+      document.getElementById('productSelect').innerHTML = products.map(p =>
         `<option value="${p.id}">${p.name} — ${p.price}</option>`
       ).join('');
 
       loadTickets();
     }
 
+    function renderMessages(msgs) {
+      if (!msgs || !msgs.length) return '';
+      return `<div class="messages">${msgs.map(m => `
+        <div class="msg ${m.from}">
+          <div class="msg-meta">${m.name || m.from} · ${new Date(m.at).toLocaleString()}</div>
+          <div>${escapeHtml(m.text)}</div>
+        </div>
+      `).join('')}</div>`;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
     async function loadTickets() {
       const tickets = await fetch('/api/tickets/mine', { credentials: 'include' }).then(r => r.json());
       const list = document.getElementById('ticketsList');
       if (!tickets.length) {
-        list.innerHTML = '<p style="color:var(--text-muted)">No tickets yet. Create one above after paying.</p>';
+        list.innerHTML = '<p style="color:var(--text-muted)">No tickets yet.</p>';
         return;
       }
       list.innerHTML = tickets.map(t => `
-        <div class="ticket-card glass-card">
-          <div>
-            <div class="ticket-id">#${t.id}</div>
-            <strong>${t.product_name}</strong> · ${t.price}
-            <div style="font-size:0.85rem; color:var(--text-muted); margin-top:0.3rem;">
-              ${t.customer_note || ''}
-              ${t.payment_proof ? `<br>Proof: ${t.payment_proof}` : ''}
-              ${t.staff_note ? `<br><em>Staff: ${t.staff_note}</em>` : ''}
+        <div class="ticket-card glass-card" data-id="${t.id}">
+          <div style="width:100%">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+              <div><span class="ticket-id">#${t.id}</span> · <strong>${t.product_name}</strong> · ${t.price}</div>
+              <span class="status ${t.status}">${t.status.replace('_',' ')}</span>
             </div>
-            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.4rem;">
-              ${new Date(t.created_at + 'Z').toLocaleString()}
+            ${t.payment_proof ? `<div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.4rem;">Proof: ${escapeHtml(t.payment_proof)}</div>` : ''}
+            ${renderMessages(t.messages)}
+            <div class="reply-box">
+              <input type="text" placeholder="Reply to staff..." id="reply-${t.id}">
+              <button class="btn primary sm" onclick="sendReply('${t.id}')">Send</button>
             </div>
           </div>
-          <span class="status ${t.status}">${t.status.replace('_', ' ')}</span>
         </div>
       `).join('');
+    }
+
+    async function sendReply(id) {
+      const input = document.getElementById('reply-' + id);
+      const text = input.value.trim();
+      if (!text) return;
+      await fetch('/api/tickets/' + id + '/messages', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      input.value = '';
+      loadTickets();
     }
 
     document.getElementById('ticketForm').addEventListener('submit', async (e) => {
@@ -128,13 +138,11 @@
       });
       const data = await res.json();
       if (data.success) {
-        document.getElementById('ticketMsg').textContent = `Ticket #${data.ticket_id} created! Staff will review soon.`;
+        document.getElementById('ticketMsg').textContent = `Ticket #${data.ticket_id} created`;
         document.getElementById('ticketMsg').classList.remove('hidden');
         e.target.reset();
         loadTickets();
-      } else {
-        alert(data.error || 'Failed');
-      }
+      } else alert(data.error || 'Failed');
     });
 
     init();
