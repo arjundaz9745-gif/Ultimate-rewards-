@@ -5,7 +5,7 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./db/database');
-const { requireLogin, requireStaff } = require('./middleware/auth');
+const { requireLogin, requireStaff: requireStaffBase } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -20,22 +20,23 @@ const REDIRECT_URI = `${BASE_URL}/auth/callback`;
 
 // Temporary staff list (User IDs) — works without bot
 const STAFF_USER_IDS = new Set([
-  '1233366635696361562',
-  '1497677845781282979',
-  '1397458376144715937',
-  '1377328880687513661',
-  '1519024580230906057',
   '1457319560146456723',
-  '1545107998060449803',
-  '1521960673926447257',
+  '1398979148063571989',
+  '1519867569169760350',
   '1518223147646713987',
-  '1278676601139367948',
-  '1213963724189077574',
-  '1255848812686348309',
-  '1366267227782910043',
-  '1398727414829551707',
-  '1528412643038204118'
+  '1381288674268020839'
 ]);
+
+function requireStaff(req, res, next) {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Login required' });
+  }
+  if (STAFF_USER_IDS.has(String(req.session.user.id))) {
+    req.session.user.is_staff = true;
+    return next();
+  }
+  return requireStaffBase(req, res, next);
+}
 
 app.set('trust proxy', 1); // Required for Render
 
@@ -88,8 +89,15 @@ async function fetchDiscordUser(accessToken) {
   return res.json();
 }
 
+function isStaffUserId(userId) {
+  return STAFF_USER_IDS.has(String(userId));
+}
+
 async function checkStaffRole(userId) {
-  // Primary: Discord role via bot
+  // 1) Hardcoded staff list ALWAYS wins
+  if (isStaffUserId(userId)) return true;
+
+  // 2) Optional: Discord role via bot
   if (BOT_TOKEN) {
     try {
       const res = await fetch(
@@ -101,15 +109,12 @@ async function checkStaffRole(userId) {
         if (Array.isArray(member.roles) && member.roles.includes(STAFF_ROLE_ID)) {
           return true;
         }
-      } else {
-        console.error('Role check HTTP', res.status);
       }
     } catch (e) {
       console.error('Role check error:', e.message);
     }
   }
-  // Fallback: hardcoded staff user IDs
-  return STAFF_USER_IDS.has(String(userId));
+  return false;
 }
 
 // ========== Auth Routes ==========
@@ -163,9 +168,17 @@ app.get('/auth/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/'));
 });
 
-app.get('/api/me', (req, res) => {
+app.get('/api/me', async (req, res) => {
   if (!req.session.user) return res.json({ loggedIn: false });
-  res.json({ loggedIn: true, user: req.session.user });
+
+  // Refresh staff flag every request (fixes old sessions)
+  const staff = await checkStaffRole(req.session.user.id);
+  req.session.user.is_staff = staff;
+
+  res.json({
+    loggedIn: true,
+    user: req.session.user
+  });
 });
 
 // ========== Products ==========
