@@ -12,7 +12,7 @@ const defaultData = {
       id: 'mcfa',
       name: 'MCFA',
       description: 'Premium Minecraft Full Access. Clean accounts, fast delivery by staff.',
-      price: '₹550',
+      price: '₹300',
       icon: '⛏️',
       stock: 'Infinite',
       active: 1
