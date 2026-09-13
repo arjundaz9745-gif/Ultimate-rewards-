@@ -307,7 +307,9 @@
           box.innerHTML = `<span style="color:var(--text-muted);font-size:0.9rem;">${data.error || 'Unavailable'}</span>`;
           return;
         }
-        meta.textContent = data.presenceEnabled ? 'Live from Discord' : 'Names only (enable Presence Intent for live status)';
+        if (data.botReady && data.presenceEnabled) meta.textContent = 'Live from Discord';
+        else if (data.botReady) meta.textContent = 'Bot online — waiting for presence';
+        else meta.textContent = data.botError ? ('Bot offline: ' + data.botError) : 'Bot starting… refresh in a minute';
         if (!data.staff || !data.staff.length) {
           box.innerHTML = '<span style="color:var(--text-muted);font-size:0.9rem;">No staff configured</span>';
           return;
