@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Tickets | Ultimate Reward</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="bg-scene" aria-hidden="true"></div>
+  <div class="bg-scene-overlay" aria-hidden="true"></div>
+  <div class="bg-blobs"><div class="blob blob-1"></div><div class="blob blob-2"></div></div>
+  <nav class="navbar glass">
+    <div class="nav-brand">
+      <img src="/logo.png" alt="UR" class="logo-img">
+      <span class="brand-text">Ultimate <span>Reward</span></span>
+    </div>
+    <div class="nav-links">
+      <a href="/" class="nav-link">Home</a>
+      <a href="/#order" class="nav-link">New order</a>
+      <a href="/auth/logout" class="btn secondary sm">Logout</a>
+    </div>
+  </nav>
+  <div class="page-wrap">
+    <div class="page-header">
+      <h1>My tickets</h1>
+      <div class="user-pill" id="userPill">...</div>
+    </div>
+    <p style="color:var(--text-muted);margin-bottom:1.25rem;">Only you and staff can see these. Closed tickets stay here for history.</p>
+    <div id="ticketsList">Loading...</div>
+  </div>
+  <script>
+    function escapeHtml(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function renderMessages(msgs) {
+      if (!msgs || !msgs.length) return '';
+      return `<div class="messages">${msgs.map(m => `
+        <div class="msg ${m.from}">
+          <div class="msg-meta">${escapeHtml(m.name || m.from)} · ${new Date(m.at).toLocaleString()}</div>
+          <div>${escapeHtml(m.text)}</div>
+          ${m.image ? `<img src="${escapeHtml(m.image)}" alt="proof" style="max-width:100%;border-radius:10px;margin-top:0.4rem;">` : ''}
+        </div>`).join('')}</div>`;
+    }
+    async function init() {
+      const me = await fetch('/api/me', { credentials: 'include' }).then(r => r.json());
+      if (!me.loggedIn) return location.href = '/auth/login';
+      if (me.user.is_staff) {
+        // staff can still view own orders here
+      }
+      const avatar = me.user.avatar
+        ? `https://cdn.discordapp.com/avatars/${me.user.id}/${me.user.avatar}.png?size=64`
+        : 'https://cdn.discordapp.com/embed/avatars/0.png';
+      document.getElementById('userPill').innerHTML = `<img src="${avatar}" class="user-avatar"><span>${escapeHtml(me.user.global_name || me.user.username)}</span>`;
+      loadTickets();
+      setInterval(loadTickets, 12000);
+    }
+    async function loadTickets() {
+      const tickets = await fetch('/api/tickets/mine', { credentials: 'include' }).then(r => r.json());
+      const list = document.getElementById('ticketsList');
+      if (!tickets.length) {
+        list.innerHTML = '<p style="color:var(--text-muted)">No tickets yet. <a href="/#order" style="color:var(--yellow)">Place an order</a></p>';
+        return;
+      }
+      list.innerHTML = tickets.map(t => `
+        <div class="ticket-card glass-card">
+          <div style="width:100%">
+            <div style="display:flex;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+              <div><span class="ticket-id">#${t.id}</span> · <strong>${escapeHtml(t.product_name)}</strong> · ${escapeHtml(t.price)}</div>
+              <span class="status ${t.status}">${t.status.replace('_',' ')}</span>
+            </div>
+            ${t.payment_proof ? `<div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.35rem;">Proof text: ${escapeHtml(t.payment_proof)}</div>` : ''}
+            ${t.proof_image ? `<img src="${escapeHtml(t.proof_image)}" alt="proof" style="max-width:220px;border-radius:10px;margin-top:0.5rem;border:1px solid rgba(42,61,92,0.6);">` : ''}
+            ${renderMessages(t.messages)}
+            ${t.status !== 'closed' && t.status !== 'rejected' ? `
+            <div class="reply-box">
+              <input type="text" placeholder="Reply to staff..." id="reply-${t.id}">
+              <button class="btn primary sm" onclick="sendReply('${t.id}')">Send</button>
+            </div>` : '<p style="color:var(--text-muted);font-size:0.85rem;margin-top:0.5rem;">This ticket is closed. History is kept.</p>'}
+          </div>
+        </div>
+      `).join('');
+    }
+    async function sendReply(id) {
+      const input = document.getElementById('reply-' + id);
+      const text = (input.value || '').trim();
+      if (!text) return;
+      await fetch('/api/tickets/' + id + '/messages', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      input.value = '';
+      loadTickets();
+    }
+    init();
+  </script>
+</body>
+</html>

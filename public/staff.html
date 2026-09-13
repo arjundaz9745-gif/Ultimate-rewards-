@@ -37,6 +37,7 @@
       <button class="btn sm secondary filter-btn" data-status="pending_payment">Pending</button>
       <button class="btn sm secondary filter-btn" data-status="paid">Paid</button>
       <button class="btn sm secondary filter-btn" data-status="delivered">Delivered</button>
+      <button class="btn sm secondary filter-btn" data-status="closed">Closed</button>
     </div>
 
     <div id="ticketsList">Loading...</div>
@@ -106,6 +107,7 @@
         <div class="msg ${m.from}">
           <div class="msg-meta">${escapeHtml(m.name || m.from)} · ${new Date(m.at).toLocaleString()}</div>
           <div>${escapeHtml(m.text)}</div>
+          ${m.image ? `<img src="${escapeHtml(m.image)}" style="max-width:100%;border-radius:10px;margin-top:0.35rem;">` : ''}
         </div>
       `).join('')}</div>`;
     }
@@ -132,13 +134,31 @@
                 <span class="status ${t.status}">${t.status.replace('_',' ')}</span>
               </div>
               <strong>${escapeHtml(t.product_name)}</strong> · ${escapeHtml(t.price)}
-              ${t.payment_proof ? `<div style="font-size:0.85rem;color:var(--text-muted);">Proof: ${escapeHtml(t.payment_proof)}</div>` : ''}
+              ${t.payment_proof ? `<div style="font-size:0.85rem;color:var(--text-muted);">Proof: ${escapeHtml(t.payment_proof)}</div>` : ''}${t.proof_image ? `<img src="${escapeHtml(t.proof_image)}" style="max-width:200px;border-radius:10px;margin-top:0.4rem;">` : ''}
               ${renderMessages(t.messages)}
-              <button class="btn sm primary" style="margin-top:0.5rem" onclick='openEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'>Open</button>
+              <div style="display:flex;gap:0.5rem;margin-top:0.5rem;flex-wrap:wrap;">
+                <button class="btn sm primary" onclick='openEdit(${JSON.stringify(t).replace(/'/g,"&#39;")})'>Open</button>
+                <button class="btn sm secondary" onclick="closeTicket('${t.id}')">Close</button>
+              </div>
             </div>
           </div>
         `;
       }).join('');
+    }
+
+    async function closeTicket(id) {
+      if (!confirm('Close ticket #' + id + '? It stays in history for staff/owners.')) return;
+      const res = await fetch('/api/staff/tickets/' + id + '/close', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        alert(e.error || 'Failed to close');
+        return;
+      }
+      loadStats();
+      loadTickets();
     }
 
     function openEdit(t) {
@@ -197,6 +217,7 @@
     });
 
     init();
+    setInterval(() => { loadStats(); loadTickets(); }, 12000);
   </script>
 </body>
 </html>

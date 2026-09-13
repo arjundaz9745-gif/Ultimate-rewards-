@@ -94,8 +94,12 @@
           <select id="productSelect" required></select>
         </div>
         <div class="form-group">
-          <label>Payment proof (UTR / transaction ID)</label>
-          <input type="text" id="paymentProof" placeholder="e.g. 123456789012" required>
+          <label>Payment proof text (UTR / transaction ID)</label>
+          <input type="text" id="paymentProof" placeholder="e.g. 123456789012">
+        </div>
+        <div class="form-group">
+          <label>Payment proof image (screenshot)</label>
+          <input type="file" id="proofImage" accept="image/*">
         </div>
         <div class="form-group">
           <label>Message to staff (optional)</label>
@@ -228,9 +232,19 @@
 
         if (data.user.is_staff) {
           document.getElementById('staffBtn').classList.remove('hidden');
+        } else {
+          // member: show my tickets button via logout area
+          const nav = document.querySelector('.nav-links');
+          if (nav && !document.getElementById('myTicketsBtn')) {
+            const a = document.createElement('a');
+            a.id = 'myTicketsBtn';
+            a.href = '/my-tickets.html';
+            a.className = 'btn secondary sm';
+            a.textContent = 'My tickets';
+            nav.insertBefore(a, document.getElementById('logoutBtn'));
+          }
         }
 
-        // Members: show order form only (no dashboard)
         document.getElementById('orderNeedLogin').classList.add('hidden');
         document.getElementById('orderForm').classList.remove('hidden');
       } catch (e) {}
@@ -256,23 +270,24 @@
 
     document.getElementById('orderForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const body = {
-        product_id: document.getElementById('productSelect').value,
-        payment_proof: document.getElementById('paymentProof').value,
-        customer_note: document.getElementById('customerNote').value
-      };
+      const fd = new FormData();
+      fd.append('product_id', document.getElementById('productSelect').value);
+      fd.append('payment_proof', document.getElementById('paymentProof').value);
+      fd.append('customer_note', document.getElementById('customerNote').value);
+      const fileInput = document.getElementById('proofImage');
+      if (fileInput && fileInput.files[0]) fd.append('proof_image', fileInput.files[0]);
       const res = await fetch('/api/tickets', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        body: fd
       });
       const data = await res.json();
       if (data.success) {
         const msg = document.getElementById('orderMsg');
-        msg.textContent = 'Ticket #' + data.ticket_id + ' submitted. Staff will process it.';
+        msg.textContent = 'Ticket #' + data.ticket_id + ' submitted. Track it in My tickets.';
         msg.classList.remove('hidden');
         e.target.reset();
+        setTimeout(() => location.href = '/my-tickets.html', 800);
       } else {
         alert(data.error || 'Failed — login first');
       }
