@@ -1,7 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, 'store.json');
+// On Render free tier, local files are wiped on restart.
+// Prefer /tmp while the instance is alive; optional Mongo later via env.
+const DB_PATH = process.env.RENDER
+  ? path.join('/tmp', 'ultimate-rewards-store.json')
+  : path.join(__dirname, 'store.json');
 
 const defaultData = {
   users: {},
@@ -58,7 +62,13 @@ const defaultData = {
 function load() {
   try {
     if (fs.existsSync(DB_PATH)) {
-      return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+      if (parsed && typeof parsed === 'object') {
+        if (!Array.isArray(parsed.tickets)) parsed.tickets = [];
+        if (!parsed.users) parsed.users = {};
+        if (!parsed.products || !parsed.products.length) parsed.products = defaultData.products;
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('DB load error:', e.message);
@@ -75,37 +85,11 @@ function save(data) {
 }
 
 let data = load();
+console.log(`[db] loaded ${data.tickets.length} tickets from ${DB_PATH}`);
 
-if (!data.products || data.products.length === 0) {
-  data.products = defaultData.products;
-  save(data);
-}
-
-// Migrate old tickets that don't have messages array
-data.tickets.forEach(t => {
-  if (!Array.isArray(t.messages)) {
-    t.messages = [];
-    if (t.customer_note) {
-      t.messages.push({
-        id: 'm1',
-        from: 'customer',
-        user_id: t.user_id,
-        text: t.customer_note,
-        at: t.created_at
-      });
-    }
-    if (t.staff_note) {
-      t.messages.push({
-        id: 'm2',
-        from: 'staff',
-        user_id: 'staff',
-        text: t.staff_note,
-        at: t.updated_at || t.created_at
-      });
-    }
-  }
+data.tickets.forEach((t) => {
+  if (!Array.isArray(t.messages)) t.messages = [];
 });
-save(data);
 
 const db = {
   getUser(id) {
@@ -124,29 +108,31 @@ const db = {
     return data.users[user.id];
   },
   getProducts() {
-    return data.products.filter(p => p.active);
+    return data.products.filter((p) => p.active);
   },
   getProduct(id) {
-    return data.products.find(p => p.id === id) || null;
+    return data.products.find((p) => p.id === id) || null;
   },
   createTicket(ticket) {
     if (!ticket.messages) ticket.messages = [];
     data.tickets.unshift(ticket);
     save(data);
+    console.log(`[db] ticket created #${ticket.id} total=${data.tickets.length}`);
     return ticket;
   },
   getTicketsByUser(userId) {
-    return data.tickets.filter(t => t.user_id === userId);
+    return data.tickets.filter((t) => t.user_id === String(userId));
   },
   getTicket(id) {
-    return data.tickets.find(t => t.id === id) || null;
+    return data.tickets.find((t) => t.id === id) || null;
   },
   getAllTickets(status = null) {
-    if (status) return data.tickets.filter(t => t.status === status);
-    return data.tickets;
+    // ALL tickets for staff — never filter by staff user
+    if (status) return data.tickets.filter((t) => t.status === status);
+    return [...data.tickets];
   },
   updateTicket(id, updates) {
-    const idx = data.tickets.findIndex(t => t.id === id);
+    const idx = data.tickets.findIndex((t) => t.id === id);
     if (idx === -1) return null;
     data.tickets[idx] = {
       ...data.tickets[idx],
@@ -157,7 +143,7 @@ const db = {
     return data.tickets[idx];
   },
   addMessage(ticketId, message) {
-    const idx = data.tickets.findIndex(t => t.id === ticketId);
+    const idx = data.tickets.findIndex((t) => t.id === ticketId);
     if (idx === -1) return null;
     if (!data.tickets[idx].messages) data.tickets[idx].messages = [];
     data.tickets[idx].messages.push(message);
@@ -165,14 +151,20 @@ const db = {
     save(data);
     return data.tickets[idx];
   },
+  deleteTicket(id) {
+    const before = data.tickets.length;
+    data.tickets = data.tickets.filter((t) => t.id !== id);
+    save(data);
+    return data.tickets.length < before;
+  },
   getStats() {
     const tickets = data.tickets;
     return {
       total: tickets.length,
-      open: tickets.filter(t => t.status === 'open').length,
-      pending: tickets.filter(t => t.status === 'pending_payment').length,
-      paid: tickets.filter(t => t.status === 'paid').length,
-      delivered: tickets.filter(t => t.status === 'delivered').length
+      open: tickets.filter((t) => t.status === 'open').length,
+      pending: tickets.filter((t) => t.status === 'pending_payment').length,
+      paid: tickets.filter((t) => t.status === 'paid').length,
+      delivered: tickets.filter((t) => t.status === 'delivered').length
     };
   }
 };
