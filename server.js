@@ -3,9 +3,29 @@ const express = require('express');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./db/database');
 const { requireLogin, requireStaff: requireStaffBase } = require('./middleware/auth');
+
+const uploadDir = process.env.RENDER ? '/tmp/uploads' : path.join(__dirname, 'public', 'uploads');
+fs.mkdirSync(uploadDir, { recursive: true });
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.png';
+    cb(null, `${Date.now()}-${uuidv4().slice(0, 8)}${ext}`);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^image\/(png|jpe?g|webp|gif)$/i.test(file.mimetype)) cb(null, true);
+    else cb(new Error('Only images allowed'));
+  }
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -56,6 +76,7 @@ app.use(session({
 }));
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(uploadDir));
 
 // ========== Discord Helpers ==========
 
@@ -117,6 +138,60 @@ async function checkStaffRole(userId) {
   return false;
 }
 
+
+async function postDiscord(content, embed) {
+  const channelId = process.env.DISCORD_TICKET_CHANNEL_ID;
+  if (!BOT_TOKEN || !channelId) return;
+  try {
+    const body = {};
+    if (content) body.content = content.slice(0, 1900);
+    if (embed) body.embeds = [embed];
+    await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bot ${BOT_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    console.error('Discord post error:', e.message);
+  }
+}
+
+async function notifyStaffChannel(ticket, user) {
+  const name = (user && (user.global_name || user.username)) || ticket.user_id;
+  await postDiscord(null, {
+    title: `New ticket #${ticket.id}`,
+    color: 0xe8c84a,
+    fields: [
+      { name: 'Product', value: String(ticket.product_name || '-'), inline: true },
+      { name: 'Price', value: String(ticket.price || '-'), inline: true },
+      { name: 'Customer', value: String(name), inline: true },
+      { name: 'Proof', value: String(ticket.payment_proof || 'none') },
+      { name: 'Note', value: String(ticket.customer_note || 'none') }
+    ],
+    footer: { text: 'Ultimate Reward • Staff Panel' }
+  });
+}
+
+async function notifyTicketMessage(ticketId, message) {
+  const ticket = db.getTicket(ticketId);
+  const who = message.from === 'staff' ? `Staff (${message.name || 'staff'})` : `Customer (${message.name || 'customer'})`;
+  let ping = '';
+  if (message.from === 'staff' && ticket && ticket.user_id) {
+    ping = `<@${ticket.user_id}> `;
+  } else if (message.from === 'customer' && STAFF_ROLE_ID) {
+    ping = `<@&${STAFF_ROLE_ID}> `;
+  }
+  const img = message.image ? `\nProof image: ${BASE_URL}${message.image}` : '';
+  await postDiscord(`${ping}**Ticket #${ticketId}** — **${who}:** ${message.text || ''}${img}`);
+}
+
+async function notifyTicketClosed(ticketId, byName) {
+  await postDiscord(`✅ **Ticket #${ticketId}** closed by **${byName || 'staff'}** (still visible in Staff Panel history).`);
+}
+
 // ========== Auth Routes ==========
 
 app.get('/auth/login', (req, res) => {
@@ -157,7 +232,7 @@ app.get('/auth/callback', async (req, res) => {
       is_staff: isStaff
     };
 
-    res.redirect(isStaff ? '/staff.html' : '/#order');
+    res.redirect(isStaff ? '/staff.html' : '/my-tickets.html');
   } catch (err) {
     console.error('OAuth error:', err);
     res.redirect('/?error=auth_failed');
@@ -189,7 +264,12 @@ app.get('/api/products', (req, res) => {
 
 // ========== Tickets (Members) ==========
 
-app.post('/api/tickets', requireLogin, (req, res) => {
+app.post('/api/tickets', requireLogin, (req, res, next) => {
+  upload.single('proof_image')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Upload failed' });
+    next();
+  });
+}, (req, res) => {
   const { product_id, customer_note, payment_proof } = req.body;
   if (!product_id) return res.status(400).json({ error: 'Product required' });
 
@@ -198,14 +278,16 @@ app.post('/api/tickets', requireLogin, (req, res) => {
 
   const id = uuidv4().slice(0, 8).toUpperCase();
   const now = new Date().toISOString();
+  const proofImage = req.file ? `/uploads/${req.file.filename}` : null;
   const messages = [];
-  if (customer_note || payment_proof) {
+  if (customer_note || payment_proof || proofImage) {
     messages.push({
       id: uuidv4().slice(0, 8),
       from: 'customer',
       user_id: req.session.user.id,
       name: req.session.user.global_name || req.session.user.username,
-      text: [customer_note, payment_proof ? ('Proof: ' + payment_proof) : null].filter(Boolean).join('\n'),
+      text: [customer_note, payment_proof ? ('Proof: ' + payment_proof) : null].filter(Boolean).join('\n') || 'Payment proof attached',
+      image: proofImage,
       at: now
     });
   }
@@ -218,6 +300,7 @@ app.post('/api/tickets', requireLogin, (req, res) => {
     price: product.price,
     status: 'open',
     payment_proof: payment_proof || null,
+    proof_image: proofImage,
     customer_note: customer_note || null,
     staff_note: null,
     messages,
@@ -226,6 +309,7 @@ app.post('/api/tickets', requireLogin, (req, res) => {
   };
 
   db.createTicket(ticket);
+  notifyStaffChannel(ticket, req.session.user).catch(() => {});
   res.json({ success: true, ticket_id: id });
 });
 
@@ -279,6 +363,26 @@ app.patch('/api/staff/tickets/:id', requireStaff, (req, res) => {
   res.json(updated);
 });
 
+
+// Soft close = keep on website forever for owners/staff history
+app.post('/api/staff/tickets/:id/close', requireStaff, (req, res) => {
+  const updated = db.updateTicket(req.params.id, { status: 'closed' });
+  if (!updated) return res.status(404).json({ error: 'Ticket not found' });
+  const by = req.session.user.global_name || req.session.user.username;
+  notifyTicketClosed(req.params.id, by).catch(() => {});
+  res.json(updated);
+});
+
+// Hard delete only if explicitly requested
+app.delete('/api/staff/tickets/:id', requireStaff, (req, res) => {
+  if (req.query.forever !== '1') {
+    return res.status(400).json({ error: 'Use close to keep history, or forever=1 to wipe' });
+  }
+  const ok = db.deleteTicket(req.params.id);
+  if (!ok) return res.status(404).json({ error: 'Ticket not found' });
+  res.json({ success: true });
+});
+
 // ========== Ticket Messages ==========
 
 app.post('/api/tickets/:id/messages', requireLogin, (req, res) => {
@@ -302,6 +406,7 @@ app.post('/api/tickets/:id/messages', requireLogin, (req, res) => {
   };
 
   const updated = db.addMessage(req.params.id, message);
+  notifyTicketMessage(req.params.id, message).catch(() => {});
   res.json(updated);
 });
 
@@ -316,6 +421,68 @@ app.get('/api/staff/stats', requireStaff, (req, res) => {
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+
+// ========== Discord bot: /close ==========
+async function startDiscordBot() {
+  if (!BOT_TOKEN) {
+    console.log('No DISCORD_BOT_TOKEN — slash /close disabled');
+    return;
+  }
+  try {
+    const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+    const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+    const commands = [
+      new SlashCommandBuilder()
+        .setName('close')
+        .setDescription('Close a website ticket (keeps history on site)')
+        .addStringOption(o => o.setName('id').setDescription('Ticket ID e.g. 4D5F7973').setRequired(true))
+    ].map(c => c.toJSON());
+
+    client.once('ready', async () => {
+      console.log(`Discord bot ready as ${client.user.tag}`);
+      try {
+        const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
+        if (GUILD_ID) {
+          await rest.put(Routes.applicationGuildCommands(client.user.id, GUILD_ID), { body: commands });
+          console.log('Registered /close in guild');
+        }
+      } catch (e) {
+        console.error('Slash register error:', e.message);
+      }
+    });
+
+    client.on('interactionCreate', async (interaction) => {
+      if (!interaction.isChatInputCommand()) return;
+      if (interaction.commandName !== 'close') return;
+
+      const uid = interaction.user.id;
+      const isStaff = STAFF_USER_IDS.has(String(uid)) ||
+        (interaction.member && interaction.member.roles && interaction.member.roles.cache && interaction.member.roles.cache.has(STAFF_ROLE_ID));
+
+      if (!isStaff) {
+        return interaction.reply({ content: 'Staff only.', ephemeral: true });
+      }
+
+      const id = (interaction.options.getString('id') || '').toUpperCase().replace('#', '');
+      const ticket = db.getTicket(id);
+      if (!ticket) {
+        return interaction.reply({ content: `Ticket #${id} not found.`, ephemeral: true });
+      }
+
+      db.updateTicket(id, { status: 'closed' });
+      notifyTicketClosed(id, interaction.user.username).catch(() => {});
+      await interaction.reply({ content: `Ticket **#${id}** closed. Still visible on the website for staff/owners.` });
+    });
+
+    await client.login(BOT_TOKEN);
+  } catch (e) {
+    console.error('Discord bot failed to start:', e.message);
+  }
+}
+
+startDiscordBot();
 
 app.listen(PORT, () => {
   console.log(`\n✦ Ultimate Rewards running at ${BASE_URL}`);
