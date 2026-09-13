@@ -39,6 +39,9 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const REDIRECT_URI = `${BASE_URL}/auth/callback`;
 
 // Temporary staff list (User IDs) — works without bot
+const staffPresence = new Map(); // userId -> { status, name, avatar }
+let discordClient = null;
+
 const STAFF_USER_IDS = new Set([
   '1457319560146456723',
   '1398979148063571989',
@@ -256,6 +259,31 @@ app.get('/api/me', async (req, res) => {
   });
 });
 
+// ========== Online staff ==========
+app.get('/api/staff/online', async (req, res) => {
+  const presenceEnabled = !!(discordClient && discordClient.isReady && discordClient.isReady());
+  const staff = [];
+  for (const id of STAFF_USER_IDS) {
+    const cached = staffPresence.get(String(id));
+    if (cached) {
+      staff.push({ id, ...cached });
+      continue;
+    }
+    // fallback name from our db
+    const u = db.getUser(id) || {};
+    staff.push({
+      id,
+      name: u.global_name || u.username || 'Staff',
+      avatar: u.avatar || null,
+      status: presenceEnabled ? 'offline' : 'unknown'
+    });
+  }
+  // online first
+  const order = { online: 0, idle: 1, dnd: 2, offline: 3, unknown: 4 };
+  staff.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+  res.json({ ok: true, presenceEnabled, staff });
+});
+
 // ========== Products ==========
 
 app.get('/api/products', (req, res) => {
@@ -430,8 +458,15 @@ async function startDiscordBot() {
     return;
   }
   try {
-    const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-    const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+    const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
+    const client = new Client({
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildPresences
+      ]
+    });
+    discordClient = client;
 
     const commands = [
       new SlashCommandBuilder()
@@ -439,6 +474,32 @@ async function startDiscordBot() {
         .setDescription('Close a website ticket (keeps history on site)')
         .addStringOption(o => o.setName('id').setDescription('Ticket ID e.g. 4D5F7973').setRequired(true))
     ].map(c => c.toJSON());
+
+    async function refreshStaffPresence() {
+      try {
+        const guild = await client.guilds.fetch(GUILD_ID);
+        await guild.members.fetch({ withPresences: true }).catch(() => null);
+        for (const id of STAFF_USER_IDS) {
+          const member = guild.members.cache.get(id);
+          if (!member) {
+            staffPresence.set(String(id), {
+              name: 'Staff',
+              avatar: null,
+              status: 'offline'
+            });
+            continue;
+          }
+          const status = member.presence?.status || 'offline';
+          staffPresence.set(String(id), {
+            name: member.displayName || member.user.username,
+            avatar: member.user.avatar,
+            status
+          });
+        }
+      } catch (e) {
+        console.error('Presence refresh:', e.message);
+      }
+    }
 
     client.once('ready', async () => {
       console.log(`Discord bot ready as ${client.user.tag}`);
@@ -451,6 +512,19 @@ async function startDiscordBot() {
       } catch (e) {
         console.error('Slash register error:', e.message);
       }
+      await refreshStaffPresence();
+      setInterval(refreshStaffPresence, 60_000);
+    });
+
+    client.on('presenceUpdate', (_old, presence) => {
+      const id = presence.userId || presence.user?.id;
+      if (!id || !STAFF_USER_IDS.has(String(id))) return;
+      const member = presence.member;
+      staffPresence.set(String(id), {
+        name: member?.displayName || presence.user?.username || 'Staff',
+        avatar: presence.user?.avatar || member?.user?.avatar || null,
+        status: presence.status || 'offline'
+      });
     });
 
     client.on('interactionCreate', async (interaction) => {
