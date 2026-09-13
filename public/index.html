@@ -39,6 +39,7 @@
       <a href="#faq" class="nav-link">FAQ</a>
       <a href="https://discord.gg/aRBccG2fKJ" target="_blank" class="nav-link">Discord</a>
       <a href="/auth/login" class="btn discord" id="loginBtn">Login</a>
+      <a href="/my-tickets.html" class="btn secondary sm hidden" id="myOrdersBtn">My Orders</a>
       <a href="/staff.html" class="btn primary hidden" id="staffBtn">Staff Panel</a>
       <a href="/auth/logout" class="btn secondary sm hidden" id="logoutBtn">Logout</a>
     </div>
@@ -66,6 +67,18 @@
       <div class="stat-card glass-card"><div class="stat-value">Staff</div><div class="stat-label">Real humans</div></div>
       <div class="stat-card glass-card"><div class="stat-value">UPI</div><div class="stat-label">Easy pay</div></div>
       <div class="stat-card glass-card"><div class="stat-value">24/7</div><div class="stat-label">Ticket system</div></div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0.5rem;padding-bottom:0.5rem;">
+    <div class="glass-card" style="padding:1.1rem 1.35rem;max-width:920px;margin:0 auto;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;">
+        <h3 style="font-family:var(--display);color:var(--yellow);margin:0;font-size:1.05rem;">Staff online</h3>
+        <span style="font-size:0.8rem;color:var(--text-muted);" id="onlineStaffUpdated">Loading…</span>
+      </div>
+      <div id="onlineStaff" style="display:flex;flex-wrap:wrap;gap:0.6rem;margin-top:0.85rem;">
+        <span style="color:var(--text-muted);font-size:0.9rem;">Checking Discord…</span>
+      </div>
     </div>
   </section>
 
@@ -230,19 +243,9 @@
         document.getElementById('heroLogin')?.classList.add('hidden');
         document.getElementById('logoutBtn').classList.remove('hidden');
 
+        document.getElementById('myOrdersBtn')?.classList.remove('hidden');
         if (data.user.is_staff) {
           document.getElementById('staffBtn').classList.remove('hidden');
-        } else {
-          // member: show my tickets button via logout area
-          const nav = document.querySelector('.nav-links');
-          if (nav && !document.getElementById('myTicketsBtn')) {
-            const a = document.createElement('a');
-            a.id = 'myTicketsBtn';
-            a.href = '/my-tickets.html';
-            a.className = 'btn secondary sm';
-            a.textContent = 'My tickets';
-            nav.insertBefore(a, document.getElementById('logoutBtn'));
-          }
         }
 
         document.getElementById('orderNeedLogin').classList.add('hidden');
@@ -293,8 +296,44 @@
       }
     });
 
+    async function loadOnlineStaff() {
+      try {
+        const res = await fetch('/api/staff/online');
+        const data = await res.json();
+        const box = document.getElementById('onlineStaff');
+        const meta = document.getElementById('onlineStaffUpdated');
+        if (!box) return;
+        if (!data.ok) {
+          box.innerHTML = `<span style="color:var(--text-muted);font-size:0.9rem;">${data.error || 'Unavailable'}</span>`;
+          return;
+        }
+        meta.textContent = data.presenceEnabled ? 'Live from Discord' : 'Names only (enable Presence Intent for live status)';
+        if (!data.staff || !data.staff.length) {
+          box.innerHTML = '<span style="color:var(--text-muted);font-size:0.9rem;">No staff configured</span>';
+          return;
+        }
+        box.innerHTML = data.staff.map(s => {
+          const color = s.status === 'online' ? '#5dcea0' : s.status === 'idle' ? '#e8c84a' : s.status === 'dnd' ? '#ff6b7a' : '#6b7280';
+          const label = s.status || 'unknown';
+          const avatar = s.avatar
+            ? `https://cdn.discordapp.com/avatars/${s.id}/${s.avatar}.png?size=64`
+            : 'https://cdn.discordapp.com/embed/avatars/0.png';
+          return `<div style="display:flex;align-items:center;gap:0.45rem;padding:0.35rem 0.7rem;border-radius:999px;background:rgba(18,28,46,0.85);border:1px solid rgba(42,61,92,0.7);">
+            <span style="width:8px;height:8px;border-radius:50%;background:${color};box-shadow:0 0 8px ${color};"></span>
+            <img src="${avatar}" style="width:22px;height:22px;border-radius:50%;">
+            <span style="font-size:0.88rem;">${s.name || 'Staff'}</span>
+            <span style="font-size:0.72rem;color:var(--text-muted);text-transform:capitalize;">${label}</span>
+          </div>`;
+        }).join('');
+      } catch (e) {
+        const box = document.getElementById('onlineStaff');
+        if (box) box.innerHTML = '<span style="color:var(--text-muted);font-size:0.9rem;">Could not load staff status</span>';
+      }
+    }
     loadMe();
     loadProducts();
+    loadOnlineStaff();
+    setInterval(loadOnlineStaff, 30000);
   </script>
 </body>
 </html>
