@@ -15,7 +15,7 @@ const defaultData = {
       id: 'mcfa',
       name: 'MCFA',
       description: 'Minecraft Full Access. Delivered by staff.',
-      price: '₹550',
+      price: '₹700',
       icon: '⛏️',
       stock: 'Infinite',
       active: 1
@@ -24,7 +24,7 @@ const defaultData = {
       id: 'robux',
       name: 'Robux',
       description: 'Roblox Robux top-up via staff.',
-      price: '$100',
+      price: '$150',
       icon: '💎',
       stock: 'Infinite',
       active: 1
