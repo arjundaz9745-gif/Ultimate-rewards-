@@ -14,6 +14,9 @@ const defaultData = {
     // ── Minecraft singles ──
     { id: 'nfa', name: 'Minecraft NFA', description: 'Non-Full Access Minecraft account.', price: '₹49', icon: '🎮', stock: 'Infinite', active: 1, tags: 'minecraft,new', category: 'minecraft' },
     { id: 'mcfa', name: 'Minecraft MCFA', description: 'Minecraft Full Access. Delivered by staff.', price: '₹149', icon: '🎮', stock: 'Infinite', active: 1, tags: 'minecraft,new', category: 'minecraft' },
+    { id: 'mcfa-gen', name: 'MCFA GEN', description: 'MCFA GEN account.', price: '₹300', icon: '🎮', stock: 'Infinite', active: 1, tags: 'minecraft,new', category: 'minecraft' },
+    { id: 'mcfa-checker', name: 'MCFA NORMAL CHECKER', description: 'MCFA Normal Checker.', price: '₹500', icon: '🎮', stock: 'Infinite', active: 1, tags: 'minecraft', category: 'minecraft' },
+    { id: 'shulkerv2-checker', name: 'SHULKERV2 CHECKER', description: 'ShulkerV2 Checker.', price: '₹900', icon: '🎮', stock: 'Infinite', active: 1, tags: 'minecraft,premium', category: 'minecraft' },
     { id: 'mc-premium', name: 'Minecraft Premium', description: 'Premium Minecraft access.', price: '₹299', icon: '🎮', stock: 'Infinite', active: 1, tags: 'minecraft,premium', category: 'minecraft' },
 
     // ── Minecraft bundles ──
