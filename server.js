@@ -455,7 +455,67 @@ app.get('/api/staff/stats', requireStaff, (req, res) => {
   res.json(db.getStats());
 });
 
-// ========== REDEEM CODE ==========
+// ========== REDEEM CODES STORAGE ==========
+const REDEEM_CODES_FILE = process.env.REDEEM_CODES_PATH
+  || (process.env.RENDER ? path.join('/tmp', 'redeem-codes.json') : path.join(__dirname, 'data', 'redeem-codes.json'));
+const REDEEM_SECRET = process.env.REDEEM_SECRET || 'ultimate-redeem-secret-change-me';
+
+function loadRedeemCodes() {
+  try {
+    if (fs.existsSync(REDEEM_CODES_FILE)) {
+      return JSON.parse(fs.readFileSync(REDEEM_CODES_FILE, 'utf8'));
+    }
+  } catch (e) {
+    console.error('redeem load', e.message);
+  }
+  return { codes: {} };
+}
+
+function saveRedeemCodes(data) {
+  try {
+    const dir = path.dirname(REDEEM_CODES_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(REDEEM_CODES_FILE, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error('redeem save', e.message);
+    throw e;
+  }
+}
+
+// Bot registers a new code here (no Discord login needed — uses shared secret)
+app.post('/api/redeem/register', (req, res) => {
+  const secret = req.headers['x-redeem-secret'] || req.body?.secret;
+  if (!secret || secret !== REDEEM_SECRET) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const code = String(req.body?.code || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{12,20}$/.test(code)) {
+    return res.status(400).json({ error: 'Invalid code format' });
+  }
+  const data = loadRedeemCodes();
+  if (data.codes[code]) {
+    return res.json({ success: true, already: true });
+  }
+  data.codes[code] = {
+    code,
+    createdBy: req.body?.createdBy || 'bot',
+    channelId: req.body?.channelId || null,
+    createdAt: new Date().toISOString(),
+    used: false,
+    usedBy: null,
+    usedAt: null,
+    type: null
+  };
+  try {
+    saveRedeemCodes(data);
+  } catch {
+    return res.status(500).json({ error: 'Could not save code' });
+  }
+  console.log('[redeem] registered code', code);
+  res.json({ success: true });
+});
+
+// ========== REDEEM CODE (customer uses code) ==========
 app.post('/api/redeem', requireLogin, async (req, res) => {
   const { type, code } = req.body || {};
   const allowed = ['nfa', 'mcfa', 'netflix', 'spotify', 'crunchyroll', 'minecraft'];
@@ -463,21 +523,12 @@ app.post('/api/redeem', requireLogin, async (req, res) => {
   if (!type || !allowed.includes(type)) {
     return res.status(400).json({ error: 'Invalid reward type' });
   }
-  if (!code || !/^\d{15}$/.test(String(code).trim())) {
-    return res.status(400).json({ error: 'Code must be exactly 15 digits' });
+  if (!code || !/^[A-Za-z0-9]{12,20}$/.test(String(code).trim())) {
+    return res.status(400).json({ error: 'Invalid code format' });
   }
 
-  const cleanCode = String(code).trim();
-  const codesFile = process.env.REDEEM_CODES_PATH || path.join(__dirname, 'data', 'redeem-codes.json');
-
-  let data = { codes: {} };
-  try {
-    if (fs.existsSync(codesFile)) {
-      data = JSON.parse(fs.readFileSync(codesFile, 'utf8'));
-    }
-  } catch (e) {
-    console.error('redeem read', e.message);
-  }
+  const cleanCode = String(code).trim().toUpperCase();
+  const data = loadRedeemCodes();
 
   const entry = data.codes[cleanCode];
   if (!entry) return res.status(400).json({ error: 'Invalid code' });
@@ -490,9 +541,7 @@ app.post('/api/redeem', requireLogin, async (req, res) => {
   entry.type = type;
 
   try {
-    const dir = path.dirname(codesFile);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(codesFile, JSON.stringify(data, null, 2));
+    saveRedeemCodes(data);
   } catch (e) {
     console.error('redeem write', e.message);
     return res.status(500).json({ error: 'Could not save code state' });
