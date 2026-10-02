@@ -235,7 +235,7 @@ app.get('/auth/callback', async (req, res) => {
       is_staff: isStaff
     };
 
-    res.redirect(isStaff ? '/staff.html' : '/my-tickets.html');
+    res.redirect('/');
   } catch (err) {
     console.error('OAuth error:', err);
     res.redirect('/?error=auth_failed');
