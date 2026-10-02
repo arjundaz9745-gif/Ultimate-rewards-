@@ -35,6 +35,7 @@
       <a href="#bundles" data-page="bundles">💥 Bundle Deals</a>
       <a href="#redeem" data-page="redeem">🔑 Redeem Code</a>
       <a href="#support" data-page="support">🎫 Support / Tickets</a>
+      <a href="#staff-tickets" data-page="staff-tickets" id="navStaffTickets" class="hidden">🛠️ Staff Tickets</a>
       <a href="#referral" data-page="referral">👥 Referral</a>
       <a href="#announcements" data-page="announcements">📢 Announcements</a>
       <a href="#vip" data-page="vip">👑 VIP Membership</a>
@@ -173,6 +174,30 @@
         </div>
       </section>
 
+      <!-- STAFF TICKETS (staff only) -->
+      <section id="page-staff-tickets" class="hidden">
+        <div class="section-head">
+          <div>
+            <h2>🛠️ Staff Tickets</h2>
+            <p>Manage all customer orders · change status · add notes</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <select id="staffStatusFilter" style="padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:rgba(0,0,0,.25);color:var(--text);">
+              <option value="">All statuses</option>
+              <option value="open">Open</option>
+              <option value="pending_payment">Pending Payment</option>
+              <option value="paid">Paid</option>
+              <option value="delivered">Delivered</option>
+              <option value="closed">Closed</option>
+              <option value="rejected">Rejected</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" id="refreshStaffTickets">Refresh</button>
+            <a href="/staff.html" class="btn btn-primary btn-sm">Full Staff Panel</a>
+          </div>
+        </div>
+        <div id="staffTicketsList"></div>
+      </section>
+
       <!-- PLACEHOLDERS for remaining sections -->
       <section id="page-coupons" class="hidden"><div class="section-head"><div><h2>🏷️ Coupons</h2><p>Coming soon / staff managed</p></div></div></section>
       <section id="page-wishlist" class="hidden"><div class="section-head"><div><h2>❤️ Wishlist</h2><p>Save products (login required)</p></div></div></section>
@@ -202,9 +227,11 @@
         giftcards: 'Gift Cards', coupons: 'Coupons', orders: 'My Orders',
         purchases: 'My Purchases', tracking: 'Order Tracking', wishlist: 'Wishlist',
         compare: 'Product Comparison', bundles: 'Bundle Deals', redeem: 'Redeem Code',
-        support: 'Support / Tickets', referral: 'Referral', announcements: 'Announcements', vip: 'VIP'
+        support: 'Support / Tickets', 'staff-tickets': 'Staff Tickets',
+        referral: 'Referral', announcements: 'Announcements', vip: 'VIP'
       };
       pageTitle.textContent = titles[name] || name;
+      if (name === 'staff-tickets') loadStaffTickets();
       // close mobile sidebar
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('sidebarOverlay').classList.remove('show');
@@ -232,9 +259,80 @@
         if (!data.loggedIn) return;
         document.getElementById('loginBtn').classList.add('hidden');
         document.getElementById('logoutBtn').classList.remove('hidden');
-        if (data.user.is_staff) document.getElementById('staffBtn').classList.remove('hidden');
+        if (data.user.is_staff) {
+          document.getElementById('staffBtn').classList.remove('hidden');
+          document.getElementById('navStaffTickets')?.classList.remove('hidden');
+        }
       } catch {}
     }
+
+    // ========== STAFF TICKETS ==========
+    async function loadStaffTickets() {
+      const box = document.getElementById('staffTicketsList');
+      if (!box) return;
+      box.innerHTML = '<p style="color:var(--muted)">Loading tickets…</p>';
+      try {
+        const status = document.getElementById('staffStatusFilter')?.value || '';
+        const url = '/api/staff/tickets' + (status ? ('?status=' + encodeURIComponent(status)) : '');
+        const res = await fetch(url, { credentials: 'include' });
+        if (!res.ok) {
+          box.innerHTML = '<p style="color:var(--danger)">Staff only. Login with a staff account.</p>';
+          return;
+        }
+        const tickets = await res.json();
+        if (!tickets.length) {
+          box.innerHTML = '<p style="color:var(--muted)">No tickets found.</p>';
+          return;
+        }
+        box.innerHTML = tickets.map(t => `
+          <div class="glass" style="padding:16px 18px;margin-bottom:12px;">
+            <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;">
+              <div>
+                <div style="font-family:monospace;color:var(--accent);font-size:0.85rem;">#${t.id}</div>
+                <strong>${t.product_name || '—'}</strong>
+                <span style="color:var(--muted);font-size:0.88rem;"> · ${t.price || ''}</span>
+                <div style="margin-top:6px;font-size:0.88rem;color:var(--muted);">
+                  Customer: <b style="color:var(--text)">${t.global_name || t.username || t.user_id}</b>
+                  ${t.payment_proof ? '<br>Proof: ' + t.payment_proof : ''}
+                  ${t.customer_note ? '<br>Note: ' + t.customer_note : ''}
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;">
+                <span class="status ${t.status || 'open'}">${(t.status || 'open').replace('_', ' ')}</span>
+                <select data-ticket="${t.id}" class="staff-status-select" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:rgba(0,0,0,.3);color:var(--text);font-size:0.82rem;">
+                  <option value="open" ${t.status==='open'?'selected':''}>Open</option>
+                  <option value="pending_payment" ${t.status==='pending_payment'?'selected':''}>Pending Payment</option>
+                  <option value="paid" ${t.status==='paid'?'selected':''}>Paid</option>
+                  <option value="delivered" ${t.status==='delivered'?'selected':''}>Delivered</option>
+                  <option value="closed" ${t.status==='closed'?'selected':''}>Closed</option>
+                  <option value="rejected" ${t.status==='rejected'?'selected':''}>Rejected</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        `).join('');
+
+        box.querySelectorAll('.staff-status-select').forEach(sel => {
+          sel.addEventListener('change', async () => {
+            const id = sel.dataset.ticket;
+            const status = sel.value;
+            const r = await fetch('/api/staff/tickets/' + id, {
+              method: 'PATCH',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status })
+            });
+            if (r.ok) loadStaffTickets();
+            else alert('Failed to update status');
+          });
+        });
+      } catch (e) {
+        box.innerHTML = '<p style="color:var(--danger)">Failed to load tickets.</p>';
+      }
+    }
+
+    document.getElementById('staffStatusFilter')?.addEventListener('change', loadStaffTickets);
+    document.getElementById('refreshStaffTickets')?.addEventListener('click', loadStaffTickets);
 
     // ========== PRODUCTS (uses existing /api/products) ==========
     function productCard(p) {
