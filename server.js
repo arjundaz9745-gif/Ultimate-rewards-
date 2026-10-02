@@ -121,10 +121,8 @@ function isStaffUserId(userId) {
 }
 
 async function checkStaffRole(userId) {
-  // 1) Hardcoded staff list ALWAYS wins
   if (isStaffUserId(userId)) return true;
 
-  // 2) Optional: Discord role via bot
   if (BOT_TOKEN) {
     try {
       const res = await fetch(
@@ -143,7 +141,6 @@ async function checkStaffRole(userId) {
   }
   return false;
 }
-
 
 async function postDiscord(content, embed) {
   const channelId = process.env.DISCORD_TICKET_CHANNEL_ID;
@@ -252,7 +249,6 @@ app.get('/auth/logout', (req, res) => {
 app.get('/api/me', async (req, res) => {
   if (!req.session.user) return res.json({ loggedIn: false });
 
-  // Refresh staff flag every request (fixes old sessions)
   const staff = await checkStaffRole(req.session.user.id);
   req.session.user.is_staff = staff;
   if (staff) {
@@ -280,7 +276,6 @@ app.get('/api/staff/online', async (req, res) => {
     const web = staffWebOnline.get(sid);
     const u = db.getUser(sid) || {};
     let status = cached?.status || (presenceEnabled ? 'offline' : 'unknown');
-    // If on website in last 3 minutes, treat as online for display
     if (web && now - web.lastSeen < 3 * 60 * 1000) {
       if (status === 'offline' || status === 'unknown') status = 'online';
     }
@@ -379,7 +374,6 @@ app.get('/api/staff/tickets', requireStaff, (req, res) => {
   const status = req.query.status || null;
   const tickets = db.getAllTickets(status);
 
-  // Attach basic user info
   const result = tickets.map(t => {
     const user = db.getUser(t.user_id) || {};
     return {
@@ -408,7 +402,6 @@ app.patch('/api/staff/tickets/:id', requireStaff, (req, res) => {
   if (!updated) return res.status(404).json({ error: 'Ticket not found' });
   res.json(updated);
 });
-
 
 // Soft close = keep on website forever for owners/staff history
 app.post('/api/staff/tickets/:id/close', requireStaff, (req, res) => {
@@ -462,12 +455,113 @@ app.get('/api/staff/stats', requireStaff, (req, res) => {
   res.json(db.getStats());
 });
 
-// ========== Fallback ==========
+// ========== REDEEM CODE ==========
+app.post('/api/redeem', requireLogin, async (req, res) => {
+  const { type, code } = req.body || {};
+  const allowed = ['nfa', 'mcfa', 'netflix', 'spotify', 'crunchyroll', 'minecraft'];
 
+  if (!type || !allowed.includes(type)) {
+    return res.status(400).json({ error: 'Invalid reward type' });
+  }
+  if (!code || !/^\d{15}$/.test(String(code).trim())) {
+    return res.status(400).json({ error: 'Code must be exactly 15 digits' });
+  }
+
+  const cleanCode = String(code).trim();
+  const codesFile = process.env.REDEEM_CODES_PATH || path.join(__dirname, 'data', 'redeem-codes.json');
+
+  let data = { codes: {} };
+  try {
+    if (fs.existsSync(codesFile)) {
+      data = JSON.parse(fs.readFileSync(codesFile, 'utf8'));
+    }
+  } catch (e) {
+    console.error('redeem read', e.message);
+  }
+
+  const entry = data.codes[cleanCode];
+  if (!entry) return res.status(400).json({ error: 'Invalid code' });
+  if (entry.used) return res.status(400).json({ error: 'Code already used' });
+
+  // Mark code as used
+  entry.used = true;
+  entry.usedBy = req.session.user.id;
+  entry.usedAt = new Date().toISOString();
+  entry.type = type;
+
+  try {
+    const dir = path.dirname(codesFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(codesFile, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error('redeem write', e.message);
+    return res.status(500).json({ error: 'Could not save code state' });
+  }
+
+  // Create ticket
+  const id = uuidv4().slice(0, 8).toUpperCase();
+  const now = new Date().toISOString();
+
+  const ticket = {
+    id,
+    user_id: req.session.user.id,
+    product_id: type,
+    product_name: type.toUpperCase() + ' (Website Redeem)',
+    price: type === 'minecraft' ? 'Original Minecraft price' : 'Paid via code',
+    status: 'open',
+    payment_proof: 'REDEEM:' + cleanCode,
+    proof_image: null,
+    customer_note: 'Redeemed via website with staff code',
+    staff_note: null,
+    messages: [{
+      id: uuidv4().slice(0, 8),
+      from: 'customer',
+      user_id: req.session.user.id,
+      name: req.session.user.global_name || req.session.user.username,
+      text: `Redeemed ${type.toUpperCase()} with code ${cleanCode}`,
+      at: now
+    }],
+    created_at: now,
+    updated_at: now
+  };
+
+  try {
+    db.createTicket(ticket);
+  } catch (e) {
+    console.error('ticket create', e.message);
+  }
+
+  // Notify Discord
+  const CH = process.env.PURCHASE_NOTIFY_CHANNEL || '1553617843046842388';
+  if (BOT_TOKEN && CH) {
+    try {
+      await fetch(`https://discord.com/api/v10/channels/${CH}/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bot ${BOT_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          content:
+            `# <@${req.session.user.id}> CREATED TICKET IN OUR WEBSITE\n` +
+            `**Type:** ${type.toUpperCase()}\n` +
+            `**Code:** \`${cleanCode}\`\n` +
+            `**Ticket:** #${id}`
+        })
+      });
+    } catch (e) {
+      console.error('discord notify', e.message);
+    }
+  }
+
+  res.json({ success: true, ticket_id: id });
+});
+// ========== END REDEEM ==========
+
+// ========== Fallback ==========
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
 
 // ========== Discord bot: /close ==========
 async function startDiscordBot() {
@@ -517,7 +611,6 @@ async function startDiscordBot() {
               status
             });
           } catch (e) {
-            // Not in server or fetch failed — try REST for public-ish data via bot
             try {
               const r = await fetch(`https://discord.com/api/v10/guilds/${guild.id}/members/${sid}`, {
                 headers: { Authorization: `Bot ${BOT_TOKEN}` }
