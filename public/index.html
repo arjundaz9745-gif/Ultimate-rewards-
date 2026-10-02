@@ -143,8 +143,8 @@
             </select>
           </div>
           <div class="form-group" id="redeemCodeWrap" style="display:none;">
-            <label>Redeem code (15 digits)</label>
-            <input type="text" id="redeemCode" maxlength="15" placeholder="123456789012345" autocomplete="off">
+            <label>Redeem code</label>
+            <input type="text" id="redeemCode" maxlength="20" placeholder="ZH26637FDHHS5638" autocomplete="off" style="text-transform:uppercase;letter-spacing:0.06em;">
           </div>
           <button class="btn btn-primary btn-full" id="redeemBtn" disabled>Redeem & Create Ticket</button>
           <p id="redeemMsg" style="margin-top:14px;text-align:center;font-size:0.9rem;"></p>
@@ -385,10 +385,10 @@
 
     redeemBtn.addEventListener('click', async () => {
       const type = redeemType.value;
-      const code = (redeemCode.value || '').trim();
-      if (!type || code.length !== 15 || !/^\d{15}$/.test(code)) {
+      const code = (redeemCode.value || '').trim().toUpperCase();
+      if (!type || !/^[A-Z0-9]{12,20}$/.test(code)) {
         redeemMsg.style.color = 'var(--danger)';
-        redeemMsg.textContent = 'Select type and enter a valid 15-digit code.';
+        redeemMsg.textContent = 'Select type and enter a valid code (e.g. ZH26637FDHHS5638).';
         return;
       }
       redeemBtn.disabled = true;
