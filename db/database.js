@@ -137,7 +137,8 @@ const db = {
     return ticket;
   },
   getTicketsByUser(userId) {
-    return data.tickets.filter((t) => t.user_id === String(userId));
+    const uid = String(userId || '');
+    return data.tickets.filter((t) => String(t.user_id) === uid);
   },
   getTicket(id) {
     return data.tickets.find((t) => t.id === id) || null;
