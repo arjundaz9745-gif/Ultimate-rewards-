@@ -43,6 +43,19 @@
           <label>Message (optional)</label>
           <textarea id="customerNote" placeholder="Any extra info..."></textarea>
         </div>
+        <div class="form-group">
+          <label>Payment response</label>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
+            <label style="font-weight:500;cursor:pointer;">
+              <input type="radio" name="payment_timing" value="on_spot" checked>
+              ⚡ <strong>On the spot</strong> — staff notified now · then type <code>@bot I am here</code> for a redeem code
+            </label>
+            <label style="font-weight:500;cursor:pointer;">
+              <input type="radio" name="payment_timing" value="later">
+              ⏳ <strong>Few minutes later</strong> — normal queue
+            </label>
+          </div>
+        </div>
         <button type="submit" class="btn primary">Create Ticket</button>
       </form>
       <p id="ticketMsg" class="hidden" style="margin-top:1rem; color:var(--success);"></p>
@@ -127,10 +140,12 @@
 
     document.getElementById('ticketForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const timingEl = document.querySelector('input[name="payment_timing"]:checked');
       const body = {
         product_id: document.getElementById('productSelect').value,
         payment_proof: document.getElementById('paymentProof').value,
-        customer_note: document.getElementById('customerNote').value
+        customer_note: document.getElementById('customerNote').value,
+        payment_timing: timingEl ? timingEl.value : 'later'
       };
       const res = await fetch('/api/tickets', {
         method: 'POST',
@@ -140,7 +155,7 @@
       });
       const data = await res.json();
       if (data.success) {
-        document.getElementById('ticketMsg').textContent = `Ticket #${data.ticket_id} created`;
+        document.getElementById('ticketMsg').textContent = `Ticket #${data.ticket_id} created` + (data.payment_timing === 'on_spot' ? ' · On-spot: staff notified — say @bot I am here in Discord for your code' : '');
         document.getElementById('ticketMsg').classList.remove('hidden');
         e.target.reset();
         loadTickets();
