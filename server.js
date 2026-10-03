@@ -35,6 +35,9 @@ const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const GUILD_ID = process.env.DISCORD_GUILD_ID || '1542542660458385508';
 const STAFF_ROLE_ID = process.env.STAFF_ROLE_ID || '1548173330794815599';
+const OWNER_ROLE_ID = process.env.OWNER_ROLE_ID || '1547183159794204675';
+const PURCHASE_NOTIFY_CHANNEL_ID = process.env.PURCHASE_NOTIFY_CHANNEL_ID || '1553617840651771974';
+const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '';
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const REDIRECT_URI = `${BASE_URL}/auth/callback`;
 
@@ -86,6 +89,51 @@ app.use('/uploads', express.static(uploadDir));
 
 // ========== Discord Helpers ==========
 
+
+async function siteLog(text) {
+  if (!LOG_CHANNEL_ID || !BOT_TOKEN) return;
+  try {
+    await fetch(`https://discord.com/api/v10/channels/${LOG_CHANNEL_ID}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bot ${BOT_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ content: `📝 **Site log:** ${text}`.slice(0, 1900) })
+    });
+  } catch (_) {}
+}
+
+async function notifyOnSpotPurchase(ticket, user) {
+  const ch = PURCHASE_NOTIFY_CHANNEL_ID;
+  if (!ch || !BOT_TOKEN) return;
+  const name = user.global_name || user.username || user.id;
+  const body = {
+    embeds: [{
+      title: '⚡ On-spot purchase',
+      color: 0xf0b429,
+      description:
+        `**Ticket:** #${ticket.id}\n` +
+        `**Product:** ${ticket.product_name}\n` +
+        `**Price:** ${ticket.price}\n` +
+        `**Customer:** ${name} (<@${user.id}>)\n\n` +
+        `Customer should type: **@bot I am here** for a redeem code.`
+    }]
+  };
+  try {
+    await fetch(`https://discord.com/api/v10/channels/${ch}/messages`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bot ${BOT_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    console.error('on_spot notify', e.message);
+  }
+}
+
 async function exchangeCode(code) {
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
@@ -131,7 +179,10 @@ async function checkStaffRole(userId) {
       );
       if (res.ok) {
         const member = await res.json();
-        if (Array.isArray(member.roles) && member.roles.includes(STAFF_ROLE_ID)) {
+        if (Array.isArray(member.roles) && (
+          member.roles.includes(STAFF_ROLE_ID) ||
+          member.roles.includes(OWNER_ROLE_ID)
+        )) {
           return true;
         }
       }
@@ -311,12 +362,13 @@ app.post('/api/tickets', requireLogin, (req, res, next) => {
     next();
   });
 }, (req, res) => {
-  const { product_id, customer_note, payment_proof } = req.body;
+  const { product_id, customer_note, payment_proof, payment_timing } = req.body;
   if (!product_id) return res.status(400).json({ error: 'Product required' });
 
   const product = db.getProduct(product_id);
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
+  const timing = (payment_timing === 'on_spot' || payment_timing === 'spot') ? 'on_spot' : 'later';
   const id = uuidv4().slice(0, 8).toUpperCase();
   const now = new Date().toISOString();
   const proofImage = req.file ? `/uploads/${req.file.filename}` : null;
@@ -339,7 +391,8 @@ app.post('/api/tickets', requireLogin, (req, res, next) => {
     product_id: product.id,
     product_name: product.name,
     price: product.price,
-    status: 'open',
+    status: timing === 'on_spot' ? 'pending_payment' : 'open',
+    payment_timing: timing,
     payment_proof: payment_proof || null,
     proof_image: proofImage,
     customer_note: customer_note || null,
@@ -351,7 +404,11 @@ app.post('/api/tickets', requireLogin, (req, res, next) => {
 
   db.createTicket(ticket);
   notifyStaffChannel(ticket, req.session.user).catch(() => {});
-  res.json({ success: true, ticket_id: id });
+  if (timing === 'on_spot') {
+    notifyOnSpotPurchase(ticket, req.session.user).catch(() => {});
+  }
+  siteLog(`Ticket #${id} created by ${req.session.user.username} · timing=${timing}`).catch(() => {});
+  res.json({ success: true, ticket_id: id, payment_timing: timing });
 });
 
 app.get('/api/tickets/mine', requireLogin, (req, res) => {
