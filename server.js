@@ -73,14 +73,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(session({
+  name: 'ur.sid',
   secret: process.env.SESSION_SECRET || 'ultimate-rewards-dev-secret',
   resave: false,
   saveUninitialized: false,
   proxy: true,
   cookie: {
-    secure: true,
+    httpOnly: true,
+    secure: true, // Render is HTTPS
     sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/'
   }
 }));
 
@@ -286,10 +289,15 @@ app.get('/auth/callback', async (req, res) => {
       is_staff: isStaff
     };
 
-    res.redirect('/');
+    // Critical on Render: wait until session is stored before redirect
+    // otherwise browser gets redirected without Set-Cookie → login loop
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => (err ? reject(err) : resolve()));
+    });
+    return res.redirect('/');
   } catch (err) {
     console.error('OAuth error:', err);
-    res.redirect('/?error=auth_failed');
+    return res.redirect('/?error=auth_failed');
   }
 });
 
