@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const db = require('./db/database');
 const { requireLogin, requireStaff: requireStaffBase } = require('./middleware/auth');
 
@@ -40,6 +41,66 @@ const PURCHASE_NOTIFY_CHANNEL_ID = process.env.PURCHASE_NOTIFY_CHANNEL_ID || '15
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '';
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const REDIRECT_URI = `${BASE_URL}/auth/callback`;
+
+// ---- Cookie session backup (fixes Render login loops when MemoryStore drops) ----
+const COOKIE_NAME = 'ur_auth';
+function signUser(user) {
+  const payload = Buffer.from(JSON.stringify({
+    id: user.id,
+    username: user.username,
+    global_name: user.global_name,
+    avatar: user.avatar,
+    is_staff: !!user.is_staff,
+    exp: Date.now() + 7 * 24 * 60 * 60 * 1000
+  }), 'utf8').toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', process.env.SESSION_SECRET || 'ultimate-rewards-dev-secret')
+    .update(payload)
+    .digest('base64url');
+  return payload + '.' + sig;
+}
+function readSignedUser(raw) {
+  try {
+    if (!raw || !raw.includes('.')) return null;
+    const [payload, sig] = raw.split('.');
+    const expect = crypto
+      .createHmac('sha256', process.env.SESSION_SECRET || 'ultimate-rewards-dev-secret')
+      .update(payload)
+      .digest('base64url');
+    if (sig !== expect) return null;
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!data?.id || (data.exp && Date.now() > data.exp)) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+function setAuthCookie(res, user) {
+  res.cookie(COOKIE_NAME, signUser(user), {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/'
+  });
+}
+function clearAuthCookie(res) {
+  res.clearCookie(COOKIE_NAME, { path: '/' });
+}
+function getRequestUser(req) {
+  if (req.session && req.session.user) return req.session.user;
+  const fromCookie = readSignedUser(req.cookies?.[COOKIE_NAME]);
+  if (fromCookie) {
+    // hydrate session for rest of request lifecycle
+    if (req.session) req.session.user = fromCookie;
+    return fromCookie;
+  }
+  return null;
+}
+
+console.log('[auth] BASE_URL=', BASE_URL);
+console.log('[auth] REDIRECT_URI=', REDIRECT_URI);
+
 
 // Temporary staff list (User IDs) — works without bot
 const staffPresence = new Map(); // userId -> { status, name, avatar }
@@ -89,6 +150,19 @@ app.use(session({
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(uploadDir));
+
+// Hydrate express session from signed cookie (survives MemoryStore loss)
+app.use((req, _res, next) => {
+  try {
+    if (!req.session) return next();
+    if (!req.session.user) {
+      const u = readSignedUser(req.cookies && req.cookies[COOKIE_NAME]);
+      if (u) req.session.user = u;
+    }
+  } catch (_) {}
+  next();
+});
+
 
 // ========== Discord Helpers ==========
 
@@ -281,20 +355,21 @@ app.get('/auth/callback', async (req, res) => {
       is_staff: isStaff ? 1 : 0
     });
 
-    req.session.user = {
+    const sessionUser = {
       id: discordUser.id,
       username: discordUser.username,
       global_name: discordUser.global_name || discordUser.username,
       avatar: discordUser.avatar,
       is_staff: isStaff
     };
+    req.session.user = sessionUser;
+    setAuthCookie(res, sessionUser);
 
-    // Critical on Render: wait until session is stored before redirect
-    // otherwise browser gets redirected without Set-Cookie → login loop
     await new Promise((resolve, reject) => {
       req.session.save((err) => (err ? reject(err) : resolve()));
     });
-    return res.redirect('/');
+    console.log('[auth] login ok', sessionUser.username, sessionUser.id);
+    return res.redirect('/?login=ok');
   } catch (err) {
     console.error('OAuth error:', err);
     return res.redirect('/?error=auth_failed');
@@ -302,25 +377,41 @@ app.get('/auth/callback', async (req, res) => {
 });
 
 app.get('/auth/logout', (req, res) => {
+  clearAuthCookie(res);
   req.session.destroy(() => res.redirect('/'));
 });
 
 app.get('/api/me', async (req, res) => {
-  if (!req.session.user) return res.json({ loggedIn: false });
+  const user = getRequestUser(req);
+  if (!user) return res.json({ loggedIn: false });
 
-  const staff = await checkStaffRole(req.session.user.id);
-  req.session.user.is_staff = staff;
+  const staff = await checkStaffRole(user.id);
+  user.is_staff = staff;
+  if (req.session) req.session.user = user;
   if (staff) {
-    staffWebOnline.set(String(req.session.user.id), {
+    staffWebOnline.set(String(user.id), {
       lastSeen: Date.now(),
-      name: req.session.user.global_name || req.session.user.username,
-      avatar: req.session.user.avatar || null
+      name: user.global_name || user.username,
+      avatar: user.avatar || null
     });
   }
 
   res.json({
     loggedIn: true,
-    user: req.session.user
+    user
+  });
+});
+
+// Debug: open after login if still broken (does not print secrets)
+app.get('/api/auth-debug', (req, res) => {
+  const user = getRequestUser(req);
+  res.json({
+    loggedIn: !!user,
+    hasSession: !!(req.session && req.session.user),
+    hasCookie: !!req.cookies?.[COOKIE_NAME],
+    baseUrl: BASE_URL,
+    redirectUri: REDIRECT_URI,
+    user: user ? { id: user.id, username: user.username } : null
   });
 });
 
