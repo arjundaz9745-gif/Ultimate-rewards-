@@ -240,6 +240,7 @@
       };
       pageTitle.textContent = titles[name] || name;
       if (name === 'staff-tickets') loadStaffTickets();
+      if (name === 'orders' || name === 'purchases' || name === 'tracking') loadOrders();
       // close mobile sidebar
       document.getElementById('sidebar').classList.remove('open');
       document.getElementById('sidebarOverlay').classList.remove('show');
@@ -267,8 +268,8 @@
         if (!data.loggedIn) return;
         document.getElementById('loginBtn').classList.add('hidden');
         document.getElementById('logoutBtn').classList.remove('hidden');
-        if (data.user.is_staff) {
-          document.getElementById('staffBtn').classList.remove('hidden');
+        if (data.user && data.user.is_staff) {
+          document.getElementById('staffBtn')?.classList.remove('hidden');
           document.getElementById('navStaffTickets')?.classList.remove('hidden');
         }
       } catch {}
@@ -378,6 +379,48 @@
       }
     }
 
+
+    // ========== MY ORDERS / TICKETS ==========
+    async function loadOrders(highlightId) {
+      const box = document.getElementById('ordersList');
+      if (!box) return;
+      box.innerHTML = '<p style="color:var(--muted)">Loading your orders…</p>';
+      try {
+        const res = await fetch('/api/tickets/mine', { credentials: 'include' });
+        if (res.status === 401) {
+          box.innerHTML = '<p style="color:var(--muted)">Please <a href="/auth/login">login</a> to see your orders.</p>';
+          return;
+        }
+        const tickets = await res.json();
+        if (!Array.isArray(tickets) || !tickets.length) {
+          box.innerHTML = '<p style="color:var(--muted)">No orders yet. Redeem a code or open a support ticket.</p>';
+          return;
+        }
+        box.innerHTML = tickets.map(t => {
+          const hi = highlightId && String(t.id) === String(highlightId);
+          return `
+          <div class="glass" style="padding:16px 18px;margin-bottom:12px;${hi ? 'border:1px solid var(--accent);' : ''}">
+            <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <div>
+                <div style="font-family:monospace;color:var(--accent);font-size:0.85rem;">#${t.id}${hi ? ' · new' : ''}</div>
+                <strong>${t.product_name || 'Order'}</strong>
+                <span style="color:var(--muted);font-size:0.88rem;"> · ${t.price || ''}</span>
+                <div style="margin-top:6px;font-size:0.85rem;color:var(--muted)">Status: <b style="color:var(--text)">${t.status || 'open'}</b></div>
+                <div style="margin-top:4px;font-size:0.8rem;color:var(--muted)">${t.created_at ? new Date(t.created_at).toLocaleString() : ''}</div>
+              </div>
+              <div>
+                <span class="badge" style="background:rgba(124,58,237,.2);color:#c4b5fd;padding:4px 10px;border-radius:999px;font-size:0.75rem;">${t.status || 'open'}</span>
+              </div>
+            </div>
+            ${t.customer_note ? `<p style="margin-top:10px;font-size:0.88rem;color:var(--muted)">${t.customer_note}</p>` : ''}
+            ${Array.isArray(t.messages) && t.messages.length ? `<div style="margin-top:10px;font-size:0.85rem;color:var(--muted)">Messages: ${t.messages.length}</div>` : ''}
+          </div>`;
+        }).join('');
+      } catch (e) {
+        box.innerHTML = '<p style="color:var(--danger)">Failed to load orders.</p>';
+      }
+    }
+
     // ========== REDEEM ==========
     const redeemType = document.getElementById('redeemType');
     const redeemCodeWrap = document.getElementById('redeemCodeWrap');
@@ -411,8 +454,13 @@
         const data = await res.json();
         if (data.success) {
           redeemMsg.style.color = 'var(--ok)';
-          redeemMsg.textContent = 'Ticket created! Staff have been notified. Code is now used.';
+          redeemMsg.textContent = 'Ticket created! Opening your orders…';
           redeemCode.value = '';
+          const tid = data.ticket_id || '';
+          setTimeout(() => {
+            showPage('orders');
+            loadOrders(tid);
+          }, 600);
         } else {
           redeemMsg.style.color = 'var(--danger)';
           redeemMsg.textContent = data.error || 'Redeem failed';
