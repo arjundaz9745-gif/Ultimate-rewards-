@@ -31,15 +31,15 @@ const upload = multer({
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
-const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const CLIENT_ID = String(process.env.DISCORD_CLIENT_ID || '').trim();
+const CLIENT_SECRET = String(process.env.DISCORD_CLIENT_SECRET || '').trim();
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 const GUILD_ID = process.env.DISCORD_GUILD_ID || '1542542660458385508';
 const STAFF_ROLE_ID = process.env.STAFF_ROLE_ID || '1548173330794815599';
 const OWNER_ROLE_ID = process.env.OWNER_ROLE_ID || '1547183159794204675';
 const PURCHASE_NOTIFY_CHANNEL_ID = process.env.PURCHASE_NOTIFY_CHANNEL_ID || '1553617840651771974';
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '';
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const BASE_URL = String(process.env.BASE_URL || `http://localhost:${PORT}`).trim().replace(/\/$/, '');
 const REDIRECT_URI = `${BASE_URL}/auth/callback`;
 
 // ---- Cookie session backup (fixes Render login loops when MemoryStore drops) ----
@@ -76,13 +76,17 @@ function readSignedUser(raw) {
   }
 }
 function setAuthCookie(res, user) {
-  res.cookie(COOKIE_NAME, signUser(user), {
+  const val = signUser(user);
+  res.cookie(COOKIE_NAME, val, {
     httpOnly: true,
     secure: true,
     sameSite: 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/'
   });
+  // Backup header (some proxies are picky)
+  const maxAge = 7 * 24 * 60 * 60;
+  res.append('Set-Cookie', `${COOKIE_NAME}=${val}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=Lax`);
 }
 function clearAuthCookie(res) {
   res.clearCookie(COOKIE_NAME, { path: '/' });
@@ -339,21 +343,57 @@ app.get('/auth/login', (req, res) => {
 });
 
 app.get('/auth/callback', async (req, res) => {
+  // Discord may return ?error=...
+  if (req.query.error) {
+    console.error('[auth] discord error', req.query.error, req.query.error_description);
+    return res.status(400).send(
+      `<h2>Discord login failed</h2><p>${String(req.query.error)}</p>` +
+      `<p>${String(req.query.error_description || '')}</p>` +
+      `<p><a href="/auth/login">Try again</a></p>`
+    );
+  }
+
   const { code } = req.query;
-  if (!code) return res.redirect('/?error=no_code');
+  if (!code) {
+    return res.status(400).send('<h2>No code from Discord</h2><p><a href="/auth/login">Try again</a></p>');
+  }
 
   try {
     const tokenData = await exchangeCode(code);
-    const discordUser = await fetchDiscordUser(tokenData.access_token);
-    const isStaff = await checkStaffRole(discordUser.id);
+    if (!tokenData.access_token) {
+      console.error('[auth] no access_token', tokenData);
+      return res.status(400).send(
+        '<h2>Token exchange failed</h2>' +
+        '<p>Check DISCORD_CLIENT_SECRET and that Discord redirect is exactly:</p>' +
+        `<pre>${REDIRECT_URI}</pre>` +
+        `<p>${String(tokenData.error || tokenData.message || JSON.stringify(tokenData)).slice(0, 300)}</p>` +
+        '<p><a href="/auth/login">Try again</a></p>'
+      );
+    }
 
-    db.upsertUser({
-      id: discordUser.id,
-      username: discordUser.username,
-      global_name: discordUser.global_name || discordUser.username,
-      avatar: discordUser.avatar,
-      is_staff: isStaff ? 1 : 0
-    });
+    const discordUser = await fetchDiscordUser(tokenData.access_token);
+    if (!discordUser?.id) {
+      return res.status(400).send('<h2>Could not load Discord profile</h2><p><a href="/auth/login">Try again</a></p>');
+    }
+
+    let isStaff = false;
+    try {
+      isStaff = await checkStaffRole(discordUser.id);
+    } catch (e) {
+      console.warn('[auth] staff check failed', e.message);
+    }
+
+    try {
+      db.upsertUser({
+        id: discordUser.id,
+        username: discordUser.username,
+        global_name: discordUser.global_name || discordUser.username,
+        avatar: discordUser.avatar,
+        is_staff: isStaff ? 1 : 0
+      });
+    } catch (e) {
+      console.warn('[auth] db upsert failed (login continues)', e.message);
+    }
 
     const sessionUser = {
       id: discordUser.id,
@@ -362,17 +402,42 @@ app.get('/auth/callback', async (req, res) => {
       avatar: discordUser.avatar,
       is_staff: isStaff
     };
-    req.session.user = sessionUser;
-    setAuthCookie(res, sessionUser);
 
-    await new Promise((resolve, reject) => {
-      req.session.save((err) => (err ? reject(err) : resolve()));
-    });
+    // Set cookie FIRST (before anything else can fail)
+    setAuthCookie(res, sessionUser);
+    req.session.user = sessionUser;
+
+    try {
+      await new Promise((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
+    } catch (e) {
+      console.warn('[auth] session.save failed (cookie still set)', e.message);
+    }
+
     console.log('[auth] login ok', sessionUser.username, sessionUser.id);
-    return res.redirect('/?login=ok');
+
+    // HTML interstitial helps mobile browsers store Set-Cookie before navigation
+    res.status(200).type('html').send(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Logged in</title>
+<meta http-equiv="refresh" content="0;url=/" />
+</head>
+<body style="font-family:system-ui;background:#0a0618;color:#fff;display:grid;place-items:center;height:100vh;margin:0">
+  <div style="text-align:center">
+    <p>Logged in as <b>${String(sessionUser.global_name || sessionUser.username).replace(/[<>]/g,'')}</b></p>
+    <p><a href="/" style="color:#c084fc">Continue to Ultimate Rewards</a></p>
+  </div>
+  <script>location.replace('/');</script>
+</body></html>`);
   } catch (err) {
     console.error('OAuth error:', err);
-    return res.redirect('/?error=auth_failed');
+    const msg = String(err && err.message ? err.message : err).slice(0, 400);
+    return res.status(400).type('html').send(
+      `<h2>Login failed</h2><pre>${msg.replace(/[<>]/g,'')}</pre>` +
+      `<p>Redirect URI must be exactly:</p><pre>${REDIRECT_URI}</pre>` +
+      `<p><a href="/auth/login">Try again</a></p>`
+    );
   }
 });
 
