@@ -118,18 +118,42 @@ const STAFF_USER_IDS = new Set([
   '1398979148063571989',
   '1519867569169760350',
   '1518223147646713987',
-  '1381288674268020839'
+  '1381288674268020839',
+  '1080190046138802306',
+  '1541659394188509215',
+  ...String(process.env.STAFF_USER_IDS || '')
+    .split(/[,\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
 ]);
 
-function requireStaff(req, res, next) {
-  if (!req.session.user) {
-    return res.status(401).json({ error: 'Login required' });
+async function requireStaff(req, res, next) {
+  try {
+    const user = (typeof getRequestUser === 'function' ? getRequestUser(req) : null) || req.session?.user;
+    if (!user) return res.status(401).json({ error: 'Login required' });
+    req.session.user = user;
+
+    if (STAFF_USER_IDS.has(String(user.id))) {
+      user.is_staff = true;
+      req.session.user = user;
+      return next();
+    }
+
+    let staff = false;
+    try {
+      staff = await checkStaffRole(user.id);
+    } catch (_) {}
+
+    if (staff) {
+      user.is_staff = true;
+      req.session.user = user;
+      return next();
+    }
+
+    return res.status(403).json({ error: 'Staff only' });
+  } catch (e) {
+    return res.status(500).json({ error: 'Staff check failed' });
   }
-  if (STAFF_USER_IDS.has(String(req.session.user.id))) {
-    req.session.user.is_staff = true;
-    return next();
-  }
-  return requireStaffBase(req, res, next);
 }
 
 app.set('trust proxy', 1); // Required for Render
@@ -158,10 +182,15 @@ app.use('/uploads', express.static(uploadDir));
 // Hydrate express session from signed cookie (survives MemoryStore loss)
 app.use((req, _res, next) => {
   try {
-    if (!req.session) return next();
-    if (!req.session.user) {
-      const u = readSignedUser(req.cookies && req.cookies[COOKIE_NAME]);
-      if (u) req.session.user = u;
+    const u = readSignedUser(req.cookies && req.cookies[COOKIE_NAME]);
+    if (u) {
+      req.urUser = u;
+      if (req.session && !req.session.user) req.session.user = u;
+      // Force staff flag for configured staff IDs
+      if (STAFF_USER_IDS.has(String(u.id))) {
+        u.is_staff = true;
+        if (req.session.user) req.session.user.is_staff = true;
+      }
     }
   } catch (_) {}
   next();
@@ -450,8 +479,11 @@ app.get('/api/me', async (req, res) => {
   const user = getRequestUser(req);
   if (!user) return res.json({ loggedIn: false });
 
-  const staff = await checkStaffRole(user.id);
-  user.is_staff = staff;
+  let staff = STAFF_USER_IDS.has(String(user.id));
+  if (!staff) {
+    try { staff = await checkStaffRole(user.id); } catch (_) {}
+  }
+  user.is_staff = !!staff;
   if (req.session) req.session.user = user;
   if (staff) {
     staffWebOnline.set(String(user.id), {
