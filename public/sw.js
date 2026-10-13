@@ -1,6 +1,6 @@
-/* Ultimate Rewards — minimal service worker for PWA install */
-const CACHE = 'ur-v1';
-const ASSETS = ['/', '/index.html', '/styles.css', '/logo.png', '/manifest.json'];
+/* Ultimate Rewards SW — do not cache auth or HTML navigations */
+const CACHE = 'ur-v2';
+const ASSETS = ['/logo.png', '/manifest.json', '/styles.css'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -16,11 +16,10 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  // never cache auth/api
-  if (url.pathname.startsWith('/auth') || url.pathname.startsWith('/api')) {
-    return;
-  }
+  if (e.request.method !== 'GET') return;
+  if (url.pathname.startsWith('/auth') || url.pathname.startsWith('/api')) return;
+  if (e.request.mode === 'navigate') return; // always network for pages
   e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request).catch(() => cached))
+    caches.match(e.request).then((cached) => cached || fetch(e.request))
   );
 });
