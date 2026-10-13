@@ -1,4 +1,9 @@
 function requireLogin(req, res, next) {
+  // Prefer session; hydrate from signed cookie if server attached it
+  if (!req.session) return res.status(401).json({ error: 'Login required' });
+  if (!req.session.user && req.urUser) {
+    req.session.user = req.urUser;
+  }
   if (!req.session.user) {
     return res.status(401).json({ error: 'Login required' });
   }
@@ -6,7 +11,7 @@ function requireLogin(req, res, next) {
 }
 
 function requireStaff(req, res, next) {
-  if (!req.session.user) {
+  if (!req.session?.user) {
     return res.status(401).json({ error: 'Login required' });
   }
   if (!req.session.user.is_staff) {
